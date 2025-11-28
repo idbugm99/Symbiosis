@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1440, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Symbiosis - Research Desktop</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="stylesheet" href="/src/styles/main.css">
+  <link rel="stylesheet" href="/src/styles/desktop.css">
+</head>
+<body>
+  <div class="desktop-container">
+
+    <!-- Top Bar -->
+    <div class="desktop-topbar">
+      <div class="topbar-left">
+        <div class="topbar-logo">
+          🔬 Symbiosis
+        </div>
+
+        <div class="topbar-workspace">
+          <span class="topbar-workspace-label">Workspace:</span>
+          <span class="topbar-workspace-name">Default</span>
+          <span>▼</span>
+        </div>
+      </div>
+
+      <div class="topbar-right">
+        <div class="topbar-search">
+          <span class="topbar-search-icon">🔍</span>
+          <input type="text" placeholder="Search chemicals, equipment, experiments..." />
+        </div>
+
+        <div class="topbar-icons">
+          <div class="topbar-icon-btn has-notification" title="Notifications">
+            🔔
+          </div>
+          <div class="topbar-icon-btn" title="Settings">
+            ⚙️
+          </div>
+        </div>
+
+        <div class="topbar-user">
+          <div class="topbar-user-avatar">C</div>
+          <span class="topbar-user-name">(user)</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Desktop Workspace -->
+    <div class="desktop-workspace">
+
+      <!-- Welcome Message (shown on first launch) -->
+      <div class="desktop-welcome" id="welcome-message">
+        <h1 class="welcome-title">[ Welcome to Symbiosis ]</h1>
+        <p class="welcome-subtitle">Your research workspace starts here.</p>
+        <p class="welcome-hint">Click the + Add Widget button to customize.</p>
+        <button class="btn-add-widget" onclick="openWidgetDrawer()">
+          <span class="btn-add-widget-icon">+</span>
+          Add Widget
+        </button>
+      </div>
+
+      <!-- Widget Grid -->
+      <div class="widget-grid" id="widget-grid">
+        <!-- Grid cells (30 cells: 6 columns × 5 rows) -->
+        <div class="widget-cell empty" data-cell="1"></div>
+        <div class="widget-cell empty" data-cell="2"></div>
+        <div class="widget-cell empty" data-cell="3"></div>
+        <div class="widget-cell empty" data-cell="4"></div>
+        <div class="widget-cell empty" data-cell="5"></div>
+        <div class="widget-cell empty" data-cell="6"></div>
+
+        <div class="widget-cell empty" data-cell="7"></div>
+        <div class="widget-cell empty" data-cell="8"></div>
+        <div class="widget-cell empty" data-cell="9"></div>
+        <div class="widget-cell empty" data-cell="10"></div>
+        <div class="widget-cell empty" data-cell="11"></div>
+        <div class="widget-cell empty" data-cell="12"></div>
+
+        <div class="widget-cell empty" data-cell="13"></div>
+        <div class="widget-cell empty" data-cell="14"></div>
+        <div class="widget-cell empty" data-cell="15"></div>
+        <div class="widget-cell empty" data-cell="16"></div>
+        <div class="widget-cell empty" data-cell="17"></div>
+        <div class="widget-cell empty" data-cell="18"></div>
+
+        <div class="widget-cell empty" data-cell="19"></div>
+        <div class="widget-cell empty" data-cell="20"></div>
+        <div class="widget-cell empty" data-cell="21"></div>
+        <div class="widget-cell empty" data-cell="22"></div>
+        <div class="widget-cell empty" data-cell="23"></div>
+        <div class="widget-cell empty" data-cell="24"></div>
+
+        <div class="widget-cell empty" data-cell="25"></div>
+        <div class="widget-cell empty" data-cell="26"></div>
+        <div class="widget-cell empty" data-cell="27"></div>
+        <div class="widget-cell empty" data-cell="28"></div>
+        <div class="widget-cell empty" data-cell="29"></div>
+        <div class="widget-cell empty" data-cell="30"></div>
+      </div>
+
+    </div>
+
+    <!-- App Dock -->
+    <div class="desktop-dock">
+      <div class="dock-app" data-app="search">
+        <div class="dock-app-icon">🔍</div>
+        <div class="dock-app-label">Search</div>
+      </div>
+
+      <div class="dock-app" data-app="notebook">
+        <div class="dock-app-icon">📓</div>
+        <div class="dock-app-label">Notebook</div>
+      </div>
+
+      <div class="dock-app" data-app="equipment">
+        <div class="dock-app-icon">🔬</div>
+        <div class="dock-app-label">Equipment</div>
+      </div>
+
+      <div class="dock-app" data-app="chemicals">
+        <div class="dock-app-icon">🧪</div>
+        <div class="dock-app-label">Chemicals</div>
+      </div>
+
+      <div class="dock-app" data-app="vendors">
+        <div class="dock-app-icon">📦</div>
+        <div class="dock-app-label">Vendors</div>
+      </div>
+
+      <div class="dock-app" data-app="tasks">
+        <div class="dock-app-icon">✓</div>
+        <div class="dock-app-label">Tasks</div>
+      </div>
+
+      <div class="dock-divider"></div>
+
+      <div class="dock-app" data-app="settings">
+        <div class="dock-app-icon">⚙️</div>
+        <div class="dock-app-label">Settings</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Widget Drawer Overlay -->
+  <div class="drawer-overlay" id="drawer-overlay" onclick="closeWidgetDrawer()"></div>
+
+  <!-- Widget Drawer -->
+  <div class="widget-drawer" id="widget-drawer">
+    <div class="drawer-handle"></div>
+
+    <div class="drawer-header">
+      <h2 class="drawer-title">Add Widget</h2>
+      <p class="drawer-subtitle">Drag widgets to your desktop to customize your workspace</p>
+    </div>
+
+    <div class="drawer-content" id="drawer-content">
+      <!-- Widget categories will be dynamically generated from widgets-static.js -->
+    </div>
+  </div>
+
+  <!-- Floating Add Widget Button -->
+  <button class="floating-add-widget-btn" onclick="openWidgetDrawer()" title="Add Widget">
+    <span class="floating-add-icon">+</span>
+  </button>
+
+  <!-- Mobile Warning -->
+  <div class="mobile-warning" id="mobile-warning">
+    <div class="mobile-warning-content">
+      <div class="mobile-warning-icon">💻</div>
+      <h2>Desktop Only</h2>
+      <p>Symbiosis Desktop is optimized for desktop computers and requires a minimum screen width of 1024px.</p>
+      <p>For the best experience, please access this page from a desktop or laptop computer.</p>
+      <button onclick="document.getElementById('mobile-warning').style.display='none'" class="btn-dismiss">
+        Continue Anyway
+      </button>
+    </div>
+  </div>
+
+  <script type="module" src="/src/desktop.js"></script>
+</body>
+</html>

@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{title}}</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="stylesheet" href="/src/styles/main.css">
+</head>
+<body>
+  <div id="app">
+    <header>
+      <nav class="navbar">
+        <div class="nav-brand">
+          <h1>Symbiosis</h1>
+          <span class="tagline">Scientific Research Platform</span>
+        </div>
+        <div class="nav-menu">
+          <a href="/">Dashboard</a>
+          <a href="/pages/chemicals.html">Chemicals</a>
+          <a href="/pages/equipment.html">Equipment</a>
+          <a href="/pages/experiments.html">Experiments</a>
+          <div id="auth-status"></div>
+        </div>
+      </nav>
+    </header>
+
+    <main id="main-content">
+      <div class="welcome-section">
+        <h2>Welcome to Symbiosis</h2>
+        <p>Your comprehensive scientific research and data-management platform</p>
+
+        <div class="quick-actions">
+          <div class="action-card">
+            <h3>Chemicals</h3>
+            <p>Manage CAS entries, safety data, and inventory</p>
+            <button onclick="window.location.href='/pages/chemicals.html'">View Chemicals</button>
+          </div>
+
+          <div class="action-card">
+            <h3>Equipment</h3>
+            <p>Track maintenance, schedules, and usage logs</p>
+            <button onclick="window.location.href='/pages/equipment.html'">View Equipment</button>
+          </div>
+
+          <div class="action-card">
+            <h3>Experiments</h3>
+            <p>Document research, protocols, and results</p>
+            <button onclick="window.location.href='/pages/experiments.html'">View Experiments</button>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <footer>
+      <p>&copy; 2025 Symbiosis - Part of the Phoenix4ge Ecosystem</p>
+    </footer>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

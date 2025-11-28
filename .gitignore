@@ -1,0 +1,75 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+*.env
+
+# Firebase
+.firebase/
+.firebaserc
+firebase-debug.log
+firebase-debug.*.log
+firestore-debug.log
+ui-debug.log
+firestore.indexes.json
+firestore.rules
+
+# Firebase credentials
+**/serviceAccountKey.json
+**/firebase-adminsdk-*.json
+
+# Build outputs
+dist/
+build/
+.vite/
+frontend/dist/
+backend/dist/
+
+# Logs
+logs/
+*.log
+combined.log
+error.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Testing
+coverage/
+.nyc_output/
+
+# Database
+*.sql.backup
+*.dump
+
+# Temporary files
+tmp/
+temp/
+.cache/
+
+# OS
+Thumbs.db
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Documentation builds
+docs/_build/
+docs/.vitepress/cache/
+
+# Secrets
+secrets/
+credentials/
