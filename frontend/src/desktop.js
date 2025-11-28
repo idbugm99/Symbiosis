@@ -10,13 +10,15 @@ import {
   categoryInfo
 } from './data/widgets-static.js';
 
+import { StorageManager } from './managers/storage-manager.js';
+import { WorkspaceManager } from './managers/workspace-manager.js';
+import { WidgetManager } from './managers/widget-manager.js';
+import { HotkeyManager } from './managers/hotkey-manager.js';
+
 class DesktopManager {
   constructor() {
-    this.widgets = [];
     this.drawerOpen = false;
     this.currentDragWidget = null;
-    this.workspaceConfig = this.loadWorkspace();
-    this.currentWorkspace = 'workspace-1';
 
     // Long-press drag state
     this.longPressTimer = null;
@@ -26,7 +28,52 @@ class DesktopManager {
     this.dragStartPos = { x: 0, y: 0 };
     this.dragOffset = { x: 0, y: 0 };
 
+    // Initialize managers
+    this.initializeManagers();
+
     this.init();
+  }
+
+  initializeManagers() {
+    // Initialize WidgetManager with callbacks
+    this.widgetManager = new WidgetManager({
+      onWidgetAdded: (widget) => {
+        this.renderWidget(widget);
+        this.workspaceManager.saveWorkspace();
+        this.hideWelcome();
+      },
+      onWidgetRemoved: (widgetId) => {
+        this.workspaceManager.saveWorkspace();
+        if (this.widgetManager.widgets.length === 0) {
+          this.showWelcome();
+        }
+      },
+      onWidgetsChanged: () => {
+        this.workspaceManager.saveWorkspace();
+      },
+      setupLongPressDrag: (widgetElement, widget) => {
+        this.setupLongPressDrag(widgetElement, widget);
+      }
+    });
+
+    // Initialize WorkspaceManager with callbacks
+    this.workspaceManager = new WorkspaceManager({
+      onWorkspaceSwitch: (workspace) => {
+        // Update widget manager with new workspace widgets
+        this.widgetManager.setWidgets(workspace.widgets || []);
+      },
+      getWidgets: () => this.widgetManager.getWidgets(),
+      clearGrid: () => this.widgetManager.clearGrid(),
+      renderWidget: (widget) => this.renderWidget(widget),
+      showWelcome: () => this.showWelcome(),
+      hideWelcome: () => this.hideWelcome()
+    });
+
+    // Initialize HotkeyManager with references to other managers
+    this.hotkeyManager = new HotkeyManager({
+      workspaceManager: this.workspaceManager,
+      widgetManager: this.widgetManager
+    });
   }
 
   init() {
@@ -40,13 +87,16 @@ class DesktopManager {
     this.setupDockApps();
     this.setupTopBar();
 
-    // Load saved widgets
+    // Load widgets from current workspace
     this.loadWidgets();
 
     // Hide welcome message if widgets exist
-    if (this.widgets.length > 0) {
+    if (this.widgetManager.widgets.length > 0) {
       this.hideWelcome();
     }
+
+    // Initialize workspace UI
+    this.workspaceManager.updateWorkspaceUI();
 
     console.log('Desktop ready!');
   }
@@ -140,41 +190,6 @@ class DesktopManager {
     document.body.style.overflow = '';
   }
 
-  // Smart Placement Algorithm
-  findAvailableCell(cols, rows) {
-    // Get all currently occupied cells
-    const occupiedCells = new Set();
-    this.widgets.forEach(widget => {
-      const cells = calculateOccupiedCells(widget.cell, widget.cols, widget.rows);
-      cells.forEach(cell => occupiedCells.add(cell));
-    });
-
-    // Try center cells first
-    const centerCells = getCenterCells();
-    for (const cell of centerCells) {
-      if (canWidgetFitAt(cell, cols, rows)) {
-        const requiredCells = calculateOccupiedCells(cell, cols, rows);
-        const isAvailable = requiredCells.every(c => !occupiedCells.has(c));
-        if (isAvailable) {
-          return cell;
-        }
-      }
-    }
-
-    // Try all cells from top-left to bottom-right
-    for (let cell = 1; cell <= gridConfig.totalCells; cell++) {
-      if (canWidgetFitAt(cell, cols, rows)) {
-        const requiredCells = calculateOccupiedCells(cell, cols, rows);
-        const isAvailable = requiredCells.every(c => !occupiedCells.has(c));
-        if (isAvailable) {
-          return cell;
-        }
-      }
-    }
-
-    return null; // No space available
-  }
-
   // Add Widget to Desktop (Click-to-Add)
   addWidgetToDesktop(widgetId) {
     const widgetDef = getWidgetById(widgetId);
@@ -183,8 +198,8 @@ class DesktopManager {
       return;
     }
 
-    // Find available position
-    const cellNumber = this.findAvailableCell(widgetDef.cols, widgetDef.rows);
+    // Find available position using WidgetManager
+    const cellNumber = this.widgetManager.findAvailableCell(widgetDef.cols, widgetDef.rows);
 
     if (cellNumber === null) {
       alert(`No space available for ${widgetDef.name} (${widgetDef.size})`);
@@ -204,34 +219,12 @@ class DesktopManager {
       rows: widgetDef.rows
     };
 
-    this.addWidget(widgetData, cellNumber);
+    // Add widget using WidgetManager
+    this.widgetManager.addWidget(widgetData, cellNumber);
     this.closeDrawer();
   }
 
-  // Widget Management
-  addWidget(widgetData, cellNumber) {
-    console.log('Adding widget:', widgetData, 'to cell:', cellNumber);
-
-    const widget = {
-      id: `widget-${Date.now()}`,
-      appId: widgetData.id, // Reference to widget definition
-      type: widgetData.type,
-      name: widgetData.name,
-      icon: widgetData.icon,
-      size: widgetData.size,
-      cols: widgetData.cols,
-      rows: widgetData.rows,
-      cell: cellNumber,
-      occupiedCells: calculateOccupiedCells(cellNumber, widgetData.cols, widgetData.rows),
-      config: {}
-    };
-
-    this.widgets.push(widget);
-    this.renderWidget(widget);
-    this.saveWorkspace();
-    this.hideWelcome();
-  }
-
+  // Render widget wrapper (for drag-drop integration)
   renderWidget(widget) {
     const startCell = widget.cell;
     const occupiedCells = widget.occupiedCells || calculateOccupiedCells(startCell, widget.cols, widget.rows);
@@ -415,7 +408,7 @@ class DesktopManager {
     widgetElement.style.cursor = 'grabbing';
     widgetElement.style.zIndex = '1000';
     widgetElement.style.opacity = '0.9';
-    
+
     // CRITICAL: Reset ALL positioning to prevent centering
     widgetElement.style.position = 'fixed';
     widgetElement.style.left = `${rect.left}px`;
@@ -426,7 +419,7 @@ class DesktopManager {
     widgetElement.style.padding = '0';
     widgetElement.style.transform = 'none';
     widgetElement.style.transformOrigin = 'top left';
-    
+
     // Remove transform during drag - it causes centering issues
     // widgetElement.style.transform = 'scale(1.05) rotate(3deg)';
     widgetElement.style.boxShadow = '0 20px 60px rgba(0, 0, 0, 0.3)';
@@ -635,7 +628,7 @@ class DesktopManager {
 
     // Check if any required cells are occupied by other widgets
     const occupiedCells = new Set();
-    this.widgets.forEach(w => {
+    this.widgetManager.widgets.forEach(w => {
       if (w.id !== this.draggedWidget.id) {
         const cells = calculateOccupiedCells(w.cell, w.cols, w.rows);
         cells.forEach(cell => occupiedCells.add(cell));
@@ -701,7 +694,7 @@ class DesktopManager {
 
     // Check if cells are available (excluding current widget's cells)
     const occupiedCells = new Set();
-    this.widgets.forEach(w => {
+    this.widgetManager.widgets.forEach(w => {
       if (w.id !== widget.id) {
         const cells = calculateOccupiedCells(w.cell, w.cols, w.rows);
         cells.forEach(cell => occupiedCells.add(cell));
@@ -729,7 +722,7 @@ class DesktopManager {
 
       // Find which widgets are in the way
       const conflictingWidgets = [];
-      this.widgets.forEach(w => {
+      this.widgetManager.widgets.forEach(w => {
         if (w.id !== widget.id) {
           const wCells = calculateOccupiedCells(w.cell, w.cols, w.rows);
           const hasConflict = requiredCells.some(c => wCells.includes(c));
@@ -767,7 +760,7 @@ class DesktopManager {
           // Note: widget.cell still has the original value since we haven't changed it yet
           widget.occupiedCells = oldOccupiedCells;
           this.renderWidget(widget);
-          this.saveWorkspace();
+          this.workspaceManager.saveWorkspace();
 
           alert(`Cannot move ${widget.name} here - no space available to relocate ${conflictWidget.name}`);
           return;
@@ -810,7 +803,7 @@ class DesktopManager {
     this.renderWidget(widget);
 
     // STEP 6: Save workspace once at the end
-    this.saveWorkspace();
+    this.workspaceManager.saveWorkspace();
 
     console.log('Widget moved to cell:', snappedCell);
   }
@@ -830,7 +823,7 @@ class DesktopManager {
 
     // Build a set of all occupied cells (including pending moves)
     const occupiedCells = new Set();
-    this.widgets.forEach(w => {
+    this.widgetManager.widgets.forEach(w => {
       if (w.id !== excludeWidgetId && w.id !== widget.id) {
         const cells = calculateOccupiedCells(w.cell, w.cols, w.rows);
         cells.forEach(c => occupiedCells.add(c));
@@ -993,7 +986,7 @@ class DesktopManager {
   }
 
   showWidgetMenu(widgetId) {
-    const widget = this.widgets.find(w => w.id === widgetId);
+    const widget = this.widgetManager.getWidgetById(widgetId);
     if (!widget) return;
 
     // Simple context menu (to be enhanced)
@@ -1001,33 +994,7 @@ class DesktopManager {
     const action = prompt(`Widget Menu:\n${actions.join('\n')}\n\nEnter action:`);
 
     if (action && action.toLowerCase() === 'remove') {
-      this.removeWidget(widgetId);
-    }
-  }
-
-  removeWidget(widgetId) {
-    const widget = this.widgets.find(w => w.id === widgetId);
-    if (!widget) return;
-
-    // Remove from array
-    this.widgets = this.widgets.filter(w => w.id !== widgetId);
-
-    // Reset all occupied cells
-    const occupiedCells = widget.occupiedCells || calculateOccupiedCells(widget.cell, widget.cols, widget.rows);
-    occupiedCells.forEach(cellNum => {
-      const cell = document.querySelector(`[data-cell="${cellNum}"]`);
-      if (cell) {
-        cell.classList.add('empty');
-        cell.classList.remove('occupied-span');
-        cell.innerHTML = ''; // Empty, no numbers
-      }
-    });
-
-    this.saveWorkspace();
-
-    // Show welcome if no widgets
-    if (this.widgets.length === 0) {
-      this.showWelcome();
+      this.widgetManager.removeWidget(widgetId);
     }
   }
 
@@ -1064,13 +1031,10 @@ class DesktopManager {
 
   // Top Bar
   setupTopBar() {
-    const workspace = document.querySelector('.topbar-workspace');
     const searchInput = document.querySelector('.topbar-search input');
     const userMenu = document.querySelector('.topbar-user');
 
-    workspace.addEventListener('click', () => {
-      alert('Workspace selector\n\nFeatures:\n- Save current layout\n- Load saved workspace\n- Create new workspace\n\n(To be implemented)');
-    });
+    // Workspace dropdown is now handled via onclick in HTML
 
     searchInput.addEventListener('focus', () => {
       console.log('Search activated');
@@ -1081,41 +1045,16 @@ class DesktopManager {
     });
   }
 
-  // Workspace Persistence
-  saveWorkspace() {
-    const config = {
-      name: 'Default',
-      widgets: this.widgets,
-      lastModified: new Date().toISOString()
-    };
-
-    localStorage.setItem('symbiosis-workspace', JSON.stringify(config));
-    console.log('Workspace saved:', config);
-  }
-
-  loadWorkspace() {
-    const saved = localStorage.getItem('symbiosis-workspace');
-
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.error('Failed to load workspace:', e);
-      }
-    }
-
-    return { name: 'Default', widgets: [] };
-  }
-
   loadWidgets() {
-    if (this.workspaceConfig.widgets && this.workspaceConfig.widgets.length > 0) {
-      this.widgets = this.workspaceConfig.widgets;
+    const currentWorkspace = this.workspaceManager.getCurrentWorkspace();
+    if (currentWorkspace.widgets && currentWorkspace.widgets.length > 0) {
+      this.widgetManager.setWidgets(currentWorkspace.widgets);
 
-      this.widgets.forEach(widget => {
+      currentWorkspace.widgets.forEach(widget => {
         this.renderWidget(widget);
       });
 
-      console.log('Loaded', this.widgets.length, 'widgets');
+      console.log('Loaded', currentWorkspace.widgets.length, 'widgets');
     }
   }
 
@@ -1137,7 +1076,7 @@ class DesktopManager {
   // Clear workspace (for testing)
   clearWorkspace() {
     if (confirm('Clear all widgets and reset workspace?')) {
-      this.widgets = [];
+      this.widgetManager.clearGrid();
 
       document.querySelectorAll('.widget-cell').forEach(cell => {
         const cellNumber = cell.dataset.cell;
@@ -1145,7 +1084,7 @@ class DesktopManager {
         cell.innerHTML = `<span style="color: #2563eb; font-weight: 600;">${cellNumber}</span>`;
       });
 
-      this.saveWorkspace();
+      this.workspaceManager.saveWorkspace();
       this.showWelcome();
 
       console.log('Workspace cleared');
@@ -1161,7 +1100,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Make available globally for debugging
   window.desktopManager = desktopManager;
+  window.workspaceManager = desktopManager.workspaceManager;
 
   console.log('Desktop manager available as window.desktopManager');
+  console.log('Workspace manager available as window.workspaceManager');
   console.log('Try: desktopManager.clearWorkspace()');
 });

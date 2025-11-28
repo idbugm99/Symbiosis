@@ -18,10 +18,26 @@
           🔬 Symbiosis
         </div>
 
-        <div class="topbar-workspace">
+        <div class="topbar-workspace" id="workspace-dropdown" onclick="window.workspaceManager.toggleWorkspaceDropdown()">
           <span class="topbar-workspace-label">Workspace:</span>
-          <span class="topbar-workspace-name">Default</span>
-          <span>▼</span>
+          <span class="topbar-workspace-name" id="current-workspace-name">Default</span>
+          <span class="topbar-workspace-arrow">▼</span>
+
+          <!-- Workspace Dropdown Menu -->
+          <div class="workspace-dropdown-menu" id="workspace-dropdown-menu">
+            <div class="workspace-menu-list" id="workspace-menu-list">
+              <!-- Workspace list will be dynamically generated -->
+            </div>
+            <div class="workspace-menu-divider"></div>
+            <div class="workspace-menu-item workspace-menu-action" onclick="window.workspaceManager.createNewWorkspace()">
+              <span class="workspace-menu-icon">+</span>
+              <span>New Workspace</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="workspace-indicators" id="workspace-indicators">
+          <!-- Workspace dots will be dynamically generated -->
         </div>
       </div>
 
