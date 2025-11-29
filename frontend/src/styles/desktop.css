@@ -327,42 +327,55 @@ html, body {
 }
 
 .topbar-search {
-  display: flex;
-  align-items: center;
-  gap: var(--space-6);
-}
-
-.topbar-search {
   position: relative;
+  flex-shrink: 0;
 }
 
 .topbar-search input {
-  width: 360px;
+  width: 48px;
+  height: 48px;
   padding: var(--space-3) var(--space-4);
-  padding-left: 40px;
+  padding-left: 48px;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 24px;
   font-size: 0.875rem;
   background: var(--white);
-  transition: all 0.2s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   outline: none;
+  cursor: pointer;
 }
 
+.topbar-search input:hover,
 .topbar-search input:focus {
+  width: 320px;
+  cursor: text;
   border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
 }
 
 .topbar-search input::placeholder {
+  color: transparent;
+  transition: color 0.2s ease 0.1s;
+}
+
+.topbar-search input:hover::placeholder,
+.topbar-search input:focus::placeholder {
   color: var(--text-light);
 }
 
 .topbar-search-icon {
   position: absolute;
-  left: 12px;
+  left: 14px;
   top: 50%;
   transform: translateY(-50%);
-  font-size: 1.125rem;
+  font-size: 1.25rem;
+  opacity: 0.5;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.topbar-search input:hover ~ .topbar-search-icon,
+.topbar-search input:focus ~ .topbar-search-icon {
   opacity: 0.4;
 }
 
@@ -734,6 +747,35 @@ html, body {
   transform-origin: bottom center;
 }
 
+/* Dock item tooltip */
+.dock-item-tooltip {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%) translateY(-8px);
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  z-index: 1003;
+}
+
+.dock-item:hover .dock-item-tooltip {
+  opacity: 1;
+  transform: translateX(-50%) translateY(-12px);
+}
+
+/* Hide tooltip in edit mode */
+.dock-edit-mode .dock-item-tooltip {
+  display: none;
+}
+
 .dock-icon {
   display: flex;
   align-items: center;
@@ -761,8 +803,20 @@ html, body {
 }
 
 /* Edit mode */
+.dock-edit-mode {
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
 .dock-edit-mode .dock-item {
   animation: dock-wiggle 0.3s ease-in-out infinite alternate;
+  cursor: grab;
+}
+
+.dock-edit-mode .dock-item:active {
+  cursor: grabbing;
 }
 
 @keyframes dock-wiggle {
@@ -799,11 +853,14 @@ html, body {
 /* Drag states */
 .dock-item-ghost {
   opacity: 0.4;
+  animation: none !important;
 }
 
 .dock-item-dragging {
   opacity: 0.8;
   cursor: grabbing !important;
+  animation: none !important;
+  transform: none !important;
 }
 
 /* Remove animation */
@@ -1357,13 +1414,21 @@ html, body {
    RESPONSIVE
    ============================================================ */
 
+@media (max-width: 1280px) {
+  .topbar-search input:hover,
+  .topbar-search input:focus {
+    width: 280px;
+  }
+}
+
 @media (max-width: 1024px) {
   .widget-grid {
     grid-template-columns: repeat(2, var(--cell-size));
   }
 
-  .topbar-search input {
-    width: 280px;
+  .topbar-search input:hover,
+  .topbar-search input:focus {
+    width: 240px;
   }
 }
 
@@ -1381,8 +1446,10 @@ html, body {
     font-size: 1.125rem;
   }
 
-  .topbar-search input {
-    width: 180px;
+  .topbar-search input:hover,
+  .topbar-search input:focus {
+    width: 200px;
+    font-size: 0.8125rem;
   }
 
   .topbar-workspace {

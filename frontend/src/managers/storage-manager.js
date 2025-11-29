@@ -108,10 +108,17 @@ export class StorageManager {
 
   /**
    * Export current data state (for manual save to file)
+   * Includes dock configuration from separate localStorage key
    * @returns {string} JSON string of current data
    */
   exportData() {
-    return JSON.stringify(this.data, null, 2);
+    // Include dock configuration if it exists
+    const dockOrder = localStorage.getItem('symbiosis-dock-order');
+    const exportData = {
+      ...this.data,
+      dockOrder: dockOrder ? JSON.parse(dockOrder) : null
+    };
+    return JSON.stringify(exportData, null, 2);
   }
 
   /**

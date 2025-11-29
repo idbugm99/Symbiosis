@@ -1234,10 +1234,19 @@ class DesktopManager {
 
             // Store in localStorage with error handling for Safari
             try {
-              const jsonString = JSON.stringify(data);
+              // Separate dock order from main data before storing
+              const { dockOrder, ...mainData } = data;
+
+              const jsonString = JSON.stringify(mainData);
               console.log('💾 Storing data in localStorage (size:', jsonString.length, 'bytes)');
               localStorage.setItem('symbiosis-data', jsonString);
               console.log('✅ localStorage.setItem successful');
+
+              // Store dock order separately if it exists
+              if (dockOrder) {
+                localStorage.setItem('symbiosis-dock-order', JSON.stringify(dockOrder));
+                console.log('✅ Dock order restored');
+              }
 
               // Verify it was stored
               const stored = localStorage.getItem('symbiosis-data');
@@ -1281,11 +1290,12 @@ class DesktopManager {
    */
   clearMemory() {
     try {
-      if (!confirm('Clear all memory? 🗑️\n\nThis will delete all workspaces and widgets.\nThis action cannot be undone.\n\nMake sure you saved your data first if you want to keep it!')) {
+      if (!confirm('Clear all memory? 🗑️\n\nThis will delete all workspaces, widgets, and dock configuration.\nThis action cannot be undone.\n\nMake sure you saved your data first if you want to keep it!')) {
         return;
       }
 
       localStorage.removeItem('symbiosis-data');
+      localStorage.removeItem('symbiosis-dock-order');
 
       console.log('✅ Memory cleared');
       alert('Memory cleared! 🗑️\n\nReloading page to reset to initial state...');
@@ -1425,6 +1435,17 @@ function initializeDockMagnification() {
   function enterEditMode() {
     editMode = true;
     dock.classList.add('dock-edit-mode');
+
+    // Reset all transforms from magnification
+    dock.querySelectorAll('.dock-item').forEach((item) => {
+      item.style.transform = '';
+      item.style.width = `${BASE_SIZE}px`;
+      item.style.height = `${BASE_SIZE}px`;
+    });
+
+    // Reset dock padding
+    dock.style.paddingTop = '16px';
+    dock.style.paddingBottom = '16px';
 
     // Enable sortable
     if (sortable) {
@@ -1602,12 +1623,18 @@ function initializeDockMagnification() {
     const dockItem = document.createElement('div');
     dockItem.className = 'dock-item';
     dockItem.dataset.app = appData.id;
+    dockItem.dataset.appName = appData.name;
 
     const dockIcon = document.createElement('div');
     dockIcon.className = 'dock-icon';
     dockIcon.textContent = appData.icon;
 
+    const tooltip = document.createElement('div');
+    tooltip.className = 'dock-item-tooltip';
+    tooltip.textContent = appData.name;
+
     dockItem.appendChild(dockIcon);
+    dockItem.appendChild(tooltip);
 
     // Insert before settings (last item, which is permanent)
     const lastItem = dock.lastElementChild;
@@ -1652,6 +1679,38 @@ function initializeDockMagnification() {
     });
   }
 
+  // Restore dock order from localStorage
+  function restoreDockOrder() {
+    const savedOrder = localStorage.getItem('symbiosis-dock-order');
+    if (!savedOrder) return;
+
+    try {
+      const order = JSON.parse(savedOrder);
+      const dockItems = Array.from(dock.querySelectorAll('.dock-item'));
+
+      // Create a map of current items by app ID
+      const itemMap = {};
+      dockItems.forEach(item => {
+        const appId = item.dataset.app;
+        if (appId) {
+          itemMap[appId] = item;
+        }
+      });
+
+      // Reorder items according to saved order
+      order.forEach(appId => {
+        if (itemMap[appId]) {
+          dock.appendChild(itemMap[appId]);
+        }
+      });
+
+      console.log('✅ Dock order restored from localStorage');
+    } catch (error) {
+      console.error('Failed to restore dock order:', error);
+    }
+  }
+
   // Initialize
   initSortable();
+  restoreDockOrder();
 }
