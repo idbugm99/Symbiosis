@@ -1,289 +1,31 @@
-// Symbiosis - Static Widget and Workspace Data
+// Symbiosis - Combined Data (imports from separate app and widget files)
+
+import { availableApps } from './apps-static.js';
+import { availableWidgets as widgetsOnly } from './widgets-only-static.js';
 
 /**
- * Available Widgets and Apps
- *
- * Types:
- * - 'app': Single icon (1×1), clicks open full page
- * - 'widget': Multi-cell display with live content
+ * Export separated apps and widgets
+ */
+export { availableApps, widgetsOnly as availableWidgetsOnly };
+
+/**
+ * Combined list for backward compatibility
+ * (This combines both apps and widgets into one array)
  */
 export const availableWidgets = [
-  // ============================================================
-  // CHEMICALS CATEGORY
-  // ============================================================
-  {
-    id: 'chemicals-app',
-    name: 'Chemicals',
-    icon: '🧪',
-    type: 'app',
-    category: 'chemicals',
-    size: '1×1',
-    cols: 1,
-    rows: 1,
-    description: 'Open chemicals database',
-    opensPage: '/pages/chemicals.html'
-  },
-  {
-    id: 'cas-quick-view',
-    name: 'CAS Quick View',
-    icon: '🧪',
-    type: 'widget',
-    category: 'chemicals',
-    size: '2×1',
-    cols: 2,
-    rows: 1,
-    description: 'Recently viewed chemical entries',
-    hasLiveContent: true
-  },
-  {
-    id: 'favorites',
-    name: 'Favorites',
-    icon: '⭐',
-    type: 'widget',
-    category: 'chemicals',
-    size: '2×1',
-    cols: 2,
-    rows: 1,
-    description: 'Your bookmarked chemicals',
-    hasLiveContent: true
-  },
-  {
-    id: 'inventory-alerts',
-    name: 'Inventory Alerts',
-    icon: '📊',
-    type: 'widget',
-    category: 'chemicals',
-    size: '2×2',
-    cols: 2,
-    rows: 2,
-    description: 'Low stock and expiration warnings',
-    hasLiveContent: true
-  },
-
-  // ============================================================
-  // EQUIPMENT CATEGORY
-  // ============================================================
-  {
-    id: 'equipment-app',
-    name: 'Equipment',
-    icon: '🔬',
-    type: 'app',
-    category: 'equipment',
-    size: '1×1',
-    cols: 1,
-    rows: 1,
-    description: 'Open equipment manager',
-    opensPage: '/pages/equipment.html'
-  },
-  {
-    id: 'calibration-schedule',
-    name: 'Calibration Schedule',
-    icon: '📅',
-    type: 'widget',
-    category: 'equipment',
-    size: '2×1',
-    cols: 2,
-    rows: 1,
-    description: 'Upcoming maintenance dates',
-    hasLiveContent: true
-  },
-  {
-    id: 'status-monitor',
-    name: 'Status Monitor',
-    icon: '📡',
-    type: 'widget',
-    category: 'equipment',
-    size: '2×2',
-    cols: 2,
-    rows: 2,
-    description: 'Real-time equipment status',
-    hasLiveContent: true
-  },
-  {
-    id: 'equipment-list',
-    name: 'Equipment List',
-    icon: '📋',
-    type: 'app',
-    category: 'equipment',
-    size: '1×1',
-    cols: 1,
-    rows: 1,
-    description: 'Quick access to all equipment',
-    opensPage: '/pages/equipment.html'
-  },
-
-  // ============================================================
-  // GENETICS CATEGORY
-  // ============================================================
-  {
-    id: 'genetics-app',
-    name: 'Genetics',
-    icon: '🧬',
-    type: 'app',
-    category: 'genetics',
-    size: '1×1',
-    cols: 1,
-    rows: 1,
-    description: 'Open genetics module',
-    opensPage: '/pages/genetics.html'
-  },
-  {
-    id: 'panel-viewer',
-    name: 'Panel Viewer',
-    icon: '🧬',
-    type: 'widget',
-    category: 'genetics',
-    size: '4×2',
-    cols: 4,
-    rows: 2,
-    description: 'Cell panel analysis dashboard',
-    hasLiveContent: true
-  },
-  {
-    id: 'marker-list',
-    name: 'Marker List',
-    icon: '🎯',
-    type: 'widget',
-    category: 'genetics',
-    size: '2×1',
-    cols: 2,
-    rows: 1,
-    description: 'Genetic markers reference',
-    hasLiveContent: true
-  },
-
-  // ============================================================
-  // VENDOR TOOLS CATEGORY
-  // ============================================================
-  {
-    id: 'vendors-app',
-    name: 'Vendors',
-    icon: '📦',
-    type: 'app',
-    category: 'vendors',
-    size: '1×1',
-    cols: 1,
-    rows: 1,
-    description: 'Open vendor manager',
-    opensPage: '/pages/vendors.html'
-  },
-  {
-    id: 'reorder-alerts',
-    name: 'Reorder Alerts',
-    icon: '🔔',
-    type: 'widget',
-    category: 'vendors',
-    size: '2×1',
-    cols: 2,
-    rows: 1,
-    description: 'Items needing restock',
-    hasLiveContent: true
-  },
-  {
-    id: 'vendor-catalog',
-    name: 'Vendor Catalog',
-    icon: '📖',
-    type: 'widget',
-    category: 'vendors',
-    size: '2×2',
-    cols: 2,
-    rows: 2,
-    description: 'Browse supplier products',
-    hasLiveContent: true
-  },
-
-  // ============================================================
-  // AI ASSISTANT CATEGORY
-  // ============================================================
-  {
-    id: 'ai-assistant-app',
-    name: 'AI Assistant',
-    icon: '🤖',
-    type: 'app',
-    category: 'ai',
-    size: '1×1',
-    cols: 1,
-    rows: 1,
-    description: 'Open AI assistant',
-    opensPage: '/pages/ai-assistant.html'
-  },
-  {
-    id: 'literature-summary',
-    name: 'Literature Summary',
-    icon: '📚',
-    type: 'widget',
-    category: 'ai',
-    size: '2×2',
-    cols: 2,
-    rows: 2,
-    description: 'AI-powered article finder',
-    hasLiveContent: true
-  },
-  {
-    id: 'sop-generator',
-    name: 'SOP Generator',
-    icon: '📝',
-    type: 'widget',
-    category: 'ai',
-    size: '2×1',
-    cols: 2,
-    rows: 1,
-    description: 'Generate standard procedures',
-    hasLiveContent: true
-  },
-  {
-    id: 'explain-mode',
-    name: 'Explain This',
-    icon: '💡',
-    type: 'app',
-    category: 'ai',
-    size: '1×1',
-    cols: 1,
-    rows: 1,
-    description: 'Educational mode for students',
-    opensPage: '/pages/explain.html'
-  },
-
-  // ============================================================
-  // RESEARCH NOTES CATEGORY
-  // ============================================================
-  {
-    id: 'notebook-app',
-    name: 'Notebook',
-    icon: '📓',
-    type: 'app',
-    category: 'notes',
-    size: '1×1',
-    cols: 1,
-    rows: 1,
-    description: 'Open research notebook',
-    opensPage: '/pages/notebook.html'
-  },
-  {
-    id: 'quick-note',
-    name: 'Quick Note',
-    icon: '✏️',
-    type: 'widget',
-    category: 'notes',
-    size: '1×1',
-    cols: 1,
-    rows: 1,
-    description: 'Fast note taking widget',
-    hasLiveContent: true
-  },
-  {
-    id: 'notebook-overview',
-    name: 'Notebook Overview',
-    icon: '📖',
-    type: 'widget',
-    category: 'notes',
-    size: '2×2',
-    cols: 2,
-    rows: 2,
-    description: 'Recent experiments and notes',
-    hasLiveContent: true
+  ...availableApps,
+  ...widgetsOnly
+].sort((a, b) => {
+  // Sort by category first, then by name
+  if (a.category !== b.category) {
+    return a.category.localeCompare(b.category);
   }
-];
+  return a.name.localeCompare(b.name);
+});
+
+// Old inline array removed - now imported from:
+//   - apps-static.js (for apps)
+//   - widgets-only-static.js (for widgets)
 
 /**
  * Default Workspaces

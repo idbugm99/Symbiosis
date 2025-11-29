@@ -18,26 +18,19 @@
           🔬 Symbiosis
         </div>
 
-        <div class="topbar-workspace" id="workspace-dropdown" onclick="window.workspaceManager.toggleWorkspaceDropdown()">
-          <span class="topbar-workspace-label">Workspace:</span>
-          <span class="topbar-workspace-name" id="current-workspace-name">Default</span>
-          <span class="topbar-workspace-arrow">▼</span>
-
-          <!-- Workspace Dropdown Menu -->
-          <div class="workspace-dropdown-menu" id="workspace-dropdown-menu">
-            <div class="workspace-menu-list" id="workspace-menu-list">
-              <!-- Workspace list will be dynamically generated -->
-            </div>
-            <div class="workspace-menu-divider"></div>
-            <div class="workspace-menu-item workspace-menu-action" onclick="window.workspaceManager.createNewWorkspace()">
-              <span class="workspace-menu-icon">+</span>
-              <span>New Workspace</span>
-            </div>
+        <div class="workspace-controls">
+          <button class="workspace-btn workspace-delete-btn" id="workspace-delete-btn" title="Delete workspace">−</button>
+          <div class="workspace-dots" id="workspace-dots">
+            <!-- Workspace dots will be dynamically generated -->
           </div>
+          <button class="workspace-btn workspace-add-btn" id="workspace-add-btn" title="Add workspace">+</button>
         </div>
+      </div>
 
-        <div class="workspace-indicators" id="workspace-indicators">
-          <!-- Workspace dots will be dynamically generated -->
+      <div class="topbar-center">
+        <div class="workspace-name" id="workspace-name">
+          Default
+          <div class="workspace-name-tooltip">Click and hold to rename workspace.</div>
         </div>
       </div>
 
@@ -51,14 +44,35 @@
           <div class="topbar-icon-btn has-notification" title="Notifications">
             🔔
           </div>
-          <div class="topbar-icon-btn" title="Settings">
-            ⚙️
-          </div>
         </div>
 
-        <div class="topbar-user">
-          <div class="topbar-user-avatar">C</div>
-          <span class="topbar-user-name">(user)</span>
+        <div class="topbar-user" id="topbar-user">
+          <div class="topbar-user-avatar" id="user-avatar">T</div>
+          <span class="topbar-user-name" id="user-name">Test User</span>
+
+          <!-- TEMPORARY DEV FEATURE: User dropdown menu for localStorage export/import -->
+          <div class="user-dropdown-menu" id="user-dropdown-menu">
+            <div class="user-dropdown-header">
+              <div class="user-dropdown-avatar" id="user-dropdown-avatar">T</div>
+              <div class="user-dropdown-info">
+                <div class="user-dropdown-name" id="user-dropdown-name">Test User</div>
+                <div class="user-dropdown-email">test@example.com</div>
+              </div>
+            </div>
+            <div class="user-dropdown-divider"></div>
+            <div class="user-dropdown-section">
+              <div class="user-dropdown-label">🔧 Developer Tools</div>
+              <button class="user-dropdown-item" onclick="desktopManager.saveMemory()">
+                💾 Save Memory
+              </button>
+              <button class="user-dropdown-item" onclick="desktopManager.loadMemory()">
+                📂 Load Memory
+              </button>
+              <button class="user-dropdown-item" onclick="desktopManager.clearMemory()">
+                🗑️ Clear Memory
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -118,43 +132,22 @@
 
     </div>
 
-    <!-- App Dock -->
-    <div class="desktop-dock">
-      <div class="dock-app" data-app="search">
-        <div class="dock-app-icon">🔍</div>
-        <div class="dock-app-label">Search</div>
+    <!-- App Dock with Magnification -->
+    <div class="desktop-dock" id="desktop-dock">
+      <div class="dock-item" data-app="search" data-permanent="true">
+        <div class="dock-icon">🔍</div>
       </div>
-
-      <div class="dock-app" data-app="notebook">
-        <div class="dock-app-icon">📓</div>
-        <div class="dock-app-label">Notebook</div>
+      <div class="dock-item" data-app="ideas">
+        <div class="dock-icon">💡</div>
       </div>
-
-      <div class="dock-app" data-app="equipment">
-        <div class="dock-app-icon">🔬</div>
-        <div class="dock-app-label">Equipment</div>
+      <div class="dock-item" data-app="inventory">
+        <div class="dock-icon">📦</div>
       </div>
-
-      <div class="dock-app" data-app="chemicals">
-        <div class="dock-app-icon">🧪</div>
-        <div class="dock-app-label">Chemicals</div>
+      <div class="dock-item" data-app="experiments">
+        <div class="dock-icon">🧪</div>
       </div>
-
-      <div class="dock-app" data-app="vendors">
-        <div class="dock-app-icon">📦</div>
-        <div class="dock-app-label">Vendors</div>
-      </div>
-
-      <div class="dock-app" data-app="tasks">
-        <div class="dock-app-icon">✓</div>
-        <div class="dock-app-label">Tasks</div>
-      </div>
-
-      <div class="dock-divider"></div>
-
-      <div class="dock-app" data-app="settings">
-        <div class="dock-app-icon">⚙️</div>
-        <div class="dock-app-label">Settings</div>
+      <div class="dock-item" data-app="settings" data-permanent="true">
+        <div class="dock-icon">⚙️</div>
       </div>
     </div>
 
@@ -168,8 +161,11 @@
     <div class="drawer-handle"></div>
 
     <div class="drawer-header">
-      <h2 class="drawer-title">Add Widget</h2>
-      <p class="drawer-subtitle">Drag widgets to your desktop to customize your workspace</p>
+      <div class="drawer-tabs">
+        <button class="drawer-tab active" data-tab="widgets">Widgets</button>
+        <button class="drawer-tab" data-tab="apps">Apps</button>
+      </div>
+      <p class="drawer-subtitle">Drag items to your desktop to customize your workspace</p>
     </div>
 
     <div class="drawer-content" id="drawer-content">

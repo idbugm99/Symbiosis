@@ -1,25 +1,35 @@
 /**
  * WidgetManager
  * Handles widget CRUD operations and grid management
+ * Works with widget instances (database-ready structure)
  */
 
 import {
   gridConfig,
   getCenterCells,
   calculateOccupiedCells,
-  canWidgetFitAt,
-  getWidgetById
+  canWidgetFitAt
 } from '../data/widgets-static.js';
 
 export class WidgetManager {
   constructor(options = {}) {
     this.widgets = [];
+    this.currentWorkspaceId = null;
+    this.storageManager = options.storageManager;
 
     // Callbacks
     this.onWidgetAdded = options.onWidgetAdded || (() => {});
     this.onWidgetRemoved = options.onWidgetRemoved || (() => {});
     this.onWidgetsChanged = options.onWidgetsChanged || (() => {});
     this.setupLongPressDrag = options.setupLongPressDrag || (() => {});
+  }
+
+  /**
+   * Set current workspace ID
+   * @param {string} workspaceId - Workspace ID
+   */
+  setCurrentWorkspace(workspaceId) {
+    this.currentWorkspaceId = workspaceId;
   }
 
   /**
@@ -79,17 +89,32 @@ export class WidgetManager {
   }
 
   /**
-   * Add a new widget
+   * Add a new widget instance
    * @param {Object} widgetData - Widget definition
    * @param {number} cellNumber - Cell number to place widget
-   * @returns {Object|null} Created widget or null if failed
+   * @returns {Object|null} Created widget instance or null if failed
    */
   addWidget(widgetData, cellNumber) {
-    console.log('Adding widget:', widgetData, 'to cell:', cellNumber);
+    console.log('Adding widget instance:', widgetData, 'to cell:', cellNumber);
 
-    const widget = {
-      id: `widget-${Date.now()}`,
-      appId: widgetData.id,
+    if (!this.currentWorkspaceId) {
+      console.error('Cannot add widget: no current workspace');
+      return null;
+    }
+
+    if (!this.storageManager) {
+      console.error('Cannot add widget: no storage manager');
+      return null;
+    }
+
+    const user = this.storageManager.getUser();
+
+    // Create widget instance with proper foreign keys (database-ready)
+    const widgetInstance = {
+      id: `instance-${Date.now()}`,
+      userId: user.id,
+      workspaceId: this.currentWorkspaceId,
+      widgetDefId: widgetData.id,
       type: widgetData.type,
       name: widgetData.name,
       icon: widgetData.icon,
@@ -98,83 +123,28 @@ export class WidgetManager {
       rows: widgetData.rows,
       cell: cellNumber,
       occupiedCells: calculateOccupiedCells(cellNumber, widgetData.cols, widgetData.rows),
-      config: {}
+      config: {},
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     };
 
-    this.widgets.push(widget);
-    this.onWidgetAdded(widget);
+    this.widgets.push(widgetInstance);
+
+    // Save to storage manager (simulates database insert)
+    const allInstances = this.storageManager.getWidgetInstances();
+    allInstances.push(widgetInstance);
+    this.storageManager.saveWidgetInstances(allInstances);
+
+    this.onWidgetAdded(widgetInstance);
     this.onWidgetsChanged();
 
-    return widget;
+    return widgetInstance;
   }
 
   /**
-   * Render a widget to the grid
-   * @param {Object} widget - Widget object
+   * Note: Widget rendering is handled by DesktopManager via callbacks
+   * This keeps rendering logic centralized with drag-drop and UI concerns
    */
-  renderWidget(widget) {
-    const startCell = widget.cell;
-    const occupiedCells = widget.occupiedCells || calculateOccupiedCells(startCell, widget.cols, widget.rows);
-
-    // Get the first cell (top-left)
-    const firstCell = document.querySelector(`[data-cell="${startCell}"]`);
-    if (!firstCell) {
-      console.error('Cell not found:', startCell);
-      return;
-    }
-
-    // Mark all occupied cells as non-empty
-    occupiedCells.forEach(cellNum => {
-      const cell = document.querySelector(`[data-cell="${cellNum}"]`);
-      if (cell) {
-        cell.classList.remove('empty');
-        if (cellNum !== startCell) {
-          cell.classList.add('occupied-span');
-          cell.innerHTML = '';
-        }
-      }
-    });
-
-    // Render widget in the first cell
-    const typeIcon = widget.type === 'app' ? '📱' : '📊';
-
-    firstCell.innerHTML = `
-      <div class="widget" data-widget-id="${widget.id}" data-cols="${widget.cols}" data-rows="${widget.rows}">
-        <div class="widget-header">
-          <span class="widget-icon">${widget.icon}</span>
-          <span class="widget-title">${widget.name}</span>
-          <span class="widget-type-icon">${typeIcon}</span>
-          <button class="widget-menu-btn" onclick="desktopManager.showWidgetMenu('${widget.id}')">⋯</button>
-        </div>
-        <div class="widget-body">
-          <div class="widget-placeholder">
-            <p>Widget content will load here</p>
-            <p style="font-size: 0.75rem; color: #9ca3af; margin-top: 8px;">
-              ${widget.appId} (${widget.size})
-            </p>
-          </div>
-        </div>
-      </div>
-    `;
-
-    // Apply multi-cell spanning styles
-    const widgetElement = firstCell.querySelector('.widget');
-    if (widgetElement && (widget.cols > 1 || widget.rows > 1)) {
-      const width = widget.cols * gridConfig.cellSize + (widget.cols - 1) * gridConfig.gap;
-      const height = widget.rows * gridConfig.cellSize + (widget.rows - 1) * gridConfig.gap;
-
-      widgetElement.style.width = `${width}px`;
-      widgetElement.style.height = `${height}px`;
-      widgetElement.style.position = 'absolute';
-      widgetElement.style.left = '0';
-      widgetElement.style.top = '0';
-      widgetElement.style.zIndex = '10';
-      widgetElement.style.margin = '0';
-    }
-
-    // Setup drag functionality
-    this.setupLongPressDrag(widgetElement, widget);
-  }
 
   /**
    * Remove a widget
@@ -202,6 +172,11 @@ export class WidgetManager {
 
     // Remove from widgets array
     this.widgets = this.widgets.filter(w => w.id !== widgetId);
+
+    // Save to storage manager
+    const allInstances = this.storageManager.getWidgetInstances();
+    const updatedInstances = allInstances.filter(w => w.id !== widgetId);
+    this.storageManager.saveWidgetInstances(updatedInstances);
 
     this.onWidgetRemoved(widgetId);
     this.onWidgetsChanged();
@@ -246,6 +221,15 @@ export class WidgetManager {
     // Update widget
     widget.cell = newCell;
     widget.occupiedCells = calculateOccupiedCells(newCell, widget.cols, widget.rows);
+    widget.updatedAt = new Date().toISOString();
+
+    // Save to storage manager
+    const allInstances = this.storageManager.getWidgetInstances();
+    const index = allInstances.findIndex(w => w.id === widget.id);
+    if (index !== -1) {
+      allInstances[index] = widget;
+      this.storageManager.saveWidgetInstances(allInstances);
+    }
 
     // Re-render
     this.renderWidget(widget);

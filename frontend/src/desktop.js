@@ -1,6 +1,8 @@
 // Symbiosis Desktop Manager
 import {
   availableWidgets,
+  availableApps,
+  availableWidgetsOnly,
   workspaces,
   gridConfig,
   getCenterCells,
@@ -14,11 +16,14 @@ import { StorageManager } from './managers/storage-manager.js';
 import { WorkspaceManager } from './managers/workspace-manager.js';
 import { WidgetManager } from './managers/widget-manager.js';
 import { HotkeyManager } from './managers/hotkey-manager.js';
+import Sortable from 'sortablejs';
+// import { DockManager } from './managers/dock-manager.js'; // Disabled - using custom dock with magnification
 
 class DesktopManager {
   constructor() {
     this.drawerOpen = false;
     this.currentDragWidget = null;
+    this.currentTab = 'widgets'; // Default to widgets tab
 
     // Long-press drag state
     this.longPressTimer = null;
@@ -35,8 +40,12 @@ class DesktopManager {
   }
 
   initializeManagers() {
-    // Initialize WidgetManager with callbacks
+    // Initialize Storage Manager first
+    this.storageManager = new StorageManager();
+
+    // Initialize WidgetManager with callbacks and storage manager
     this.widgetManager = new WidgetManager({
+      storageManager: this.storageManager,
       onWidgetAdded: (widget) => {
         this.renderWidget(widget);
         this.workspaceManager.saveWorkspace();
@@ -58,9 +67,14 @@ class DesktopManager {
 
     // Initialize WorkspaceManager with callbacks
     this.workspaceManager = new WorkspaceManager({
+      storageManager: this.storageManager,
       onWorkspaceSwitch: (workspace) => {
-        // Update widget manager with new workspace widgets
-        this.widgetManager.setWidgets(workspace.widgets || []);
+        // Set current workspace in widget manager
+        this.widgetManager.setCurrentWorkspace(workspace.id);
+
+        // Load widget instances for this workspace from storage
+        const instances = this.storageManager.getWidgetInstancesForWorkspace(workspace.id);
+        this.widgetManager.setWidgets(instances || []);
       },
       getWidgets: () => this.widgetManager.getWidgets(),
       clearGrid: () => this.widgetManager.clearGrid(),
@@ -72,19 +86,29 @@ class DesktopManager {
     // Initialize HotkeyManager with references to other managers
     this.hotkeyManager = new HotkeyManager({
       workspaceManager: this.workspaceManager,
-      widgetManager: this.widgetManager
+      widgetManager: this.widgetManager,
+      desktopManager: this
     });
+
+    // Initialize DockManager with storage and callbacks
+    // DISABLED - using pure dockbar implementation
+    // this.dockManager = new DockManager({
+    //   storageManager: this.storageManager,
+    //   onAppClick: (app) => this.openApp(app.id)
+    // });
   }
 
   init() {
     console.log('Symbiosis Desktop initializing...');
+
+    // Load user data and update UI
+    this.loadUserData();
 
     // Populate widget drawer from static data
     this.populateWidgetDrawer();
 
     // Setup event listeners
     this.setupWidgetDrawer();
-    this.setupDockApps();
     this.setupTopBar();
 
     // Load widgets from current workspace
@@ -101,18 +125,53 @@ class DesktopManager {
     console.log('Desktop ready!');
   }
 
+  // Load User Data
+  loadUserData() {
+    const user = this.storageManager.getUser();
+    if (user) {
+      const userNameElement = document.getElementById('user-name');
+      const userAvatarElement = document.getElementById('user-avatar');
+
+      if (userNameElement) {
+        userNameElement.textContent = user.name;
+      }
+
+      if (userAvatarElement) {
+        // Use first letter of name for avatar
+        userAvatarElement.textContent = user.name.charAt(0).toUpperCase();
+      }
+
+      // TEMPORARY DEV FEATURE: Update dropdown menu
+      const dropdownName = document.getElementById('user-dropdown-name');
+      const dropdownAvatar = document.getElementById('user-dropdown-avatar');
+
+      if (dropdownName) {
+        dropdownName.textContent = user.name;
+      }
+
+      if (dropdownAvatar) {
+        dropdownAvatar.textContent = user.name.charAt(0).toUpperCase();
+      }
+
+      console.log('User loaded:', user.name);
+    }
+  }
+
   // Populate Widget Drawer from Static Data
   populateWidgetDrawer() {
     const drawerContent = document.getElementById('drawer-content');
     if (!drawerContent) return;
 
-    // Group widgets by category
+    // Get items based on current tab
+    const items = this.currentTab === 'apps' ? availableApps : availableWidgetsOnly;
+
+    // Group items by category
     const categories = {};
-    availableWidgets.forEach(widget => {
-      if (!categories[widget.category]) {
-        categories[widget.category] = [];
+    items.forEach(item => {
+      if (!categories[item.category]) {
+        categories[item.category] = [];
       }
-      categories[widget.category].push(widget);
+      categories[item.category].push(item);
     });
 
     // Build HTML for each category
@@ -131,8 +190,13 @@ class DesktopManager {
 
       widgets.forEach(widget => {
         const typeIcon = widget.type === 'app' ? '📱' : '📊';
+        const isDraggable = widget.cols === 1 && widget.rows === 1 && widget.type === 'app';
+
         html += `
-          <div class="widget-card" data-widget-id="${widget.id}">
+          <div class="widget-card"
+               data-widget-id="${widget.id}"
+               ${isDraggable ? 'draggable="true"' : ''}
+               ${isDraggable ? 'data-draggable="true"' : ''}>
             <div class="widget-card-header">
               <div class="widget-card-icon">${widget.icon}</div>
               <span class="widget-type-badge">${typeIcon}</span>
@@ -144,6 +208,7 @@ class DesktopManager {
               <button class="widget-add-btn" onclick="desktopManager.addWidgetToDesktop('${widget.id}')">
                 + Add
               </button>
+              ${isDraggable ? '<span class="widget-drag-hint">💡 Drag to dock</span>' : ''}
             </div>
           </div>
         `;
@@ -156,12 +221,54 @@ class DesktopManager {
     });
 
     drawerContent.innerHTML = html;
+
+    // Setup drag handlers for draggable widgets
+    this.setupWidgetDragHandlers();
+  }
+
+  /**
+   * Setup drag handlers for widget cards (for dock)
+   */
+  setupWidgetDragHandlers() {
+    const draggableCards = document.querySelectorAll('.widget-card[draggable="true"]');
+
+    draggableCards.forEach(card => {
+      const widgetId = card.dataset.widgetId;
+      const widgetData = getWidgetById(widgetId);
+
+      card.addEventListener('dragstart', (e) => {
+        e.dataTransfer.effectAllowed = 'copy';
+        e.dataTransfer.setData('application/json', JSON.stringify(widgetData));
+        card.classList.add('dragging');
+
+        // Close drawer when dragging to dock
+        this.closeDrawer();
+      });
+
+      card.addEventListener('dragend', (e) => {
+        card.classList.remove('dragging');
+      });
+    });
   }
 
   // Widget Drawer Management
   setupWidgetDrawer() {
     const drawer = document.getElementById('widget-drawer');
     const overlay = document.getElementById('drawer-overlay');
+
+    // Setup tab switching
+    const tabButtons = document.querySelectorAll('.drawer-tab');
+    tabButtons.forEach(tab => {
+      tab.addEventListener('click', () => {
+        // Update active tab
+        tabButtons.forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+
+        // Update current tab and re-render
+        this.currentTab = tab.dataset.tab;
+        this.populateWidgetDrawer();
+      });
+    });
 
     // Make drawer functions global
     window.openWidgetDrawer = () => this.openDrawer();
@@ -1040,21 +1147,174 @@ class DesktopManager {
       console.log('Search activated');
     });
 
-    userMenu.addEventListener('click', () => {
-      alert('User menu\n\nOptions:\n- Profile\n- Preferences\n- Sign out\n\n(To be implemented)');
+    // TEMPORARY DEV FEATURE: User dropdown toggle
+    userMenu.addEventListener('click', (e) => {
+      e.stopPropagation();
+      userMenu.classList.toggle('active');
     });
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!userMenu.contains(e.target)) {
+        userMenu.classList.remove('active');
+      }
+    });
+  }
+
+  // ============================================================
+  // TEMPORARY DEV FEATURE: Memory Management (localStorage export/import)
+  // TODO: Replace with backend API integration
+  // ============================================================
+
+  /**
+   * Save current localStorage state to a downloadable JSON file
+   */
+  saveMemory() {
+    try {
+      const data = this.storageManager.exportData();
+      const blob = new Blob([data], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `symbiosis-memory-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      console.log('✅ Memory saved to file');
+      alert('Memory saved! 💾\n\nYour workspace data has been downloaded.\nUse "Load Memory" to restore it in another browser.');
+    } catch (error) {
+      console.error('Failed to save memory:', error);
+      alert('Failed to save memory: ' + error.message);
+    }
+  }
+
+  /**
+   * Load memory from a JSON file
+   */
+  loadMemory() {
+    try {
+      // Check if localStorage is available (Safari private browsing blocks it)
+      try {
+        localStorage.setItem('test', 'test');
+        localStorage.removeItem('test');
+      } catch (e) {
+        alert('⚠️ localStorage is not available\n\nThis might be because:\n- You\'re in Private Browsing mode\n- Safari\'s tracking prevention is blocking it\n\nPlease try:\n1. Using normal (non-private) browsing\n2. Disabling "Prevent Cross-Site Tracking" in Safari settings');
+        return;
+      }
+
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'application/json';
+
+      input.onchange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          try {
+            console.log('📂 Reading file:', file.name);
+            const data = JSON.parse(event.target.result);
+            console.log('📊 Parsed data:', data);
+
+            // Validate data structure
+            if (!data.user || !data.workspaces || !data.widgetInstances) {
+              throw new Error('Invalid memory file format. Missing required fields: user, workspaces, or widgetInstances');
+            }
+
+            console.log('✅ Data validation passed');
+
+            // Confirm before overwriting
+            if (!confirm('Load this memory?\n\nThis will replace your current workspace data.\nCurrent data will be lost unless you saved it first.')) {
+              console.log('❌ User cancelled load');
+              return;
+            }
+
+            // Store in localStorage with error handling for Safari
+            try {
+              const jsonString = JSON.stringify(data);
+              console.log('💾 Storing data in localStorage (size:', jsonString.length, 'bytes)');
+              localStorage.setItem('symbiosis-data', jsonString);
+              console.log('✅ localStorage.setItem successful');
+
+              // Verify it was stored
+              const stored = localStorage.getItem('symbiosis-data');
+              if (!stored) {
+                throw new Error('localStorage.setItem succeeded but data is not retrievable');
+              }
+              console.log('✅ Verified data is retrievable from localStorage');
+            } catch (storageError) {
+              console.error('❌ localStorage error:', storageError);
+              throw new Error('Failed to store data in localStorage: ' + storageError.message + '\n\nThis might be a Safari private browsing issue.');
+            }
+
+            console.log('✅ Memory loaded from file successfully');
+            alert('Memory loaded! 📂\n\nReloading page to apply changes...');
+
+            // Force a hard reload (Safari sometimes caches aggressively)
+            window.location.href = window.location.href;
+          } catch (error) {
+            console.error('❌ Failed to load memory:', error);
+            alert('Failed to load memory:\n\n' + error.message + '\n\nCheck the browser console for details.');
+          }
+        };
+
+        reader.onerror = (error) => {
+          console.error('❌ File read error:', error);
+          alert('Failed to read file: ' + error.message);
+        };
+
+        reader.readAsText(file);
+      };
+
+      input.click();
+    } catch (error) {
+      console.error('❌ Failed to initialize load:', error);
+      alert('Failed to load memory: ' + error.message);
+    }
+  }
+
+  /**
+   * Clear all localStorage data (reset to initial state)
+   */
+  clearMemory() {
+    try {
+      if (!confirm('Clear all memory? 🗑️\n\nThis will delete all workspaces and widgets.\nThis action cannot be undone.\n\nMake sure you saved your data first if you want to keep it!')) {
+        return;
+      }
+
+      localStorage.removeItem('symbiosis-data');
+
+      console.log('✅ Memory cleared');
+      alert('Memory cleared! 🗑️\n\nReloading page to reset to initial state...');
+
+      // Reload page to reset
+      window.location.reload();
+    } catch (error) {
+      console.error('Failed to clear memory:', error);
+      alert('Failed to clear memory: ' + error.message);
+    }
   }
 
   loadWidgets() {
     const currentWorkspace = this.workspaceManager.getCurrentWorkspace();
-    if (currentWorkspace.widgets && currentWorkspace.widgets.length > 0) {
-      this.widgetManager.setWidgets(currentWorkspace.widgets);
 
-      currentWorkspace.widgets.forEach(widget => {
+    // IMPORTANT: Always set current workspace ID, even if no widgets yet
+    this.widgetManager.setCurrentWorkspace(currentWorkspace.id);
+
+    // Load widget instances from storage for current workspace
+    const instances = this.storageManager.getWidgetInstancesForWorkspace(currentWorkspace.id);
+
+    if (instances && instances.length > 0) {
+      this.widgetManager.setWidgets(instances);
+
+      instances.forEach(widget => {
         this.renderWidget(widget);
       });
 
-      console.log('Loaded', currentWorkspace.widgets.length, 'widgets');
+      console.log('Loaded', instances.length, 'widgets from localStorage');
     }
   }
 
@@ -1101,8 +1361,297 @@ document.addEventListener('DOMContentLoaded', () => {
   // Make available globally for debugging
   window.desktopManager = desktopManager;
   window.workspaceManager = desktopManager.workspaceManager;
+  window.hotkeyManager = desktopManager.hotkeyManager;
+  window.storageManager = desktopManager.storageManager;
+
+  // Export functionality for saving data to file
+  window.exportData = () => {
+    const data = desktopManager.storageManager.exportData();
+    console.log('%c📦 Current Data State:', 'color: #2563eb; font-weight: bold; font-size: 14px');
+    console.log('%cCopy this and paste it into temp-data-file.js:', 'color: #059669; font-weight: bold');
+    console.log(data);
+    return data;
+  };
 
   console.log('Desktop manager available as window.desktopManager');
   console.log('Workspace manager available as window.workspaceManager');
-  console.log('Try: desktopManager.clearWorkspace()');
+  console.log('Hotkey manager available as window.hotkeyManager');
+  console.log('Storage manager available as window.storageManager');
+  console.log('');
+  console.log('%c💾 To export data:', 'color: #2563eb; font-weight: bold');
+  console.log('  Run: exportData()');
+  console.log('  Copy the output and paste into temp-data-file.js');
+
+  // Initialize dock magnification effect
+  initializeDockMagnification();
 });
+
+// Dock Magnification & Management
+function initializeDockMagnification() {
+  const dock = document.getElementById('desktop-dock');
+  if (!dock) return;
+
+  const BASE_SIZE = 64;
+  const MAX_SCALE = 1.4;
+  const INFLUENCE_RANGE = 120;
+  const EXPANDED_PADDING = 22;
+
+  let editMode = false;
+  let longPressTimer = null;
+  let sortable = null;
+
+  // Initialize SortableJS
+  function initSortable() {
+    if (sortable) {
+      sortable.destroy();
+    }
+
+    sortable = Sortable.create(dock, {
+      animation: 200,
+      easing: 'cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+      ghostClass: 'dock-item-ghost',
+      dragClass: 'dock-item-dragging',
+      disabled: true, // Start disabled, enable in edit mode
+
+      onEnd: (evt) => {
+        if (evt.oldIndex !== evt.newIndex) {
+          saveDockOrder();
+        }
+      }
+    });
+  }
+
+  // Enter edit mode
+  function enterEditMode() {
+    editMode = true;
+    dock.classList.add('dock-edit-mode');
+
+    // Enable sortable
+    if (sortable) {
+      sortable.option('disabled', false);
+    }
+
+    // Add remove buttons to non-permanent items only
+    dock.querySelectorAll('.dock-item').forEach(item => {
+      const isPermanent = item.dataset.permanent === 'true';
+
+      if (!isPermanent && !item.querySelector('.dock-remove-btn')) {
+        const removeBtn = document.createElement('div');
+        removeBtn.className = 'dock-remove-btn';
+        removeBtn.innerHTML = '×';
+        removeBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          removeApp(item);
+        });
+        item.appendChild(removeBtn);
+      }
+    });
+  }
+
+  // Exit edit mode
+  function exitEditMode() {
+    editMode = false;
+    dock.classList.remove('dock-edit-mode');
+
+    // Disable sortable
+    if (sortable) {
+      sortable.option('disabled', true);
+    }
+
+    // Remove all remove buttons
+    dock.querySelectorAll('.dock-remove-btn').forEach(btn => btn.remove());
+  }
+
+  // Remove an app from dock
+  function removeApp(item) {
+    if (confirm('Remove this app from the dock?')) {
+      item.classList.add('dock-item-removing');
+      setTimeout(() => {
+        item.remove();
+        saveDockOrder();
+        exitEditMode();
+      }, 300);
+    }
+  }
+
+  // Save dock order to localStorage
+  function saveDockOrder() {
+    const order = Array.from(dock.querySelectorAll('.dock-item')).map(item =>
+      item.dataset.app
+    );
+    localStorage.setItem('symbiosis-dock-order', JSON.stringify(order));
+  }
+
+  // Setup long-press detection for edit mode
+  dock.querySelectorAll('.dock-item').forEach(item => {
+    const icon = item.querySelector('.dock-icon');
+
+    icon.addEventListener('mousedown', () => {
+      if (!editMode) {
+        longPressTimer = setTimeout(() => {
+          enterEditMode();
+        }, 2000); // 2 seconds
+      }
+    });
+
+    icon.addEventListener('mouseup', () => {
+      if (longPressTimer) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+      }
+    });
+
+    icon.addEventListener('mouseleave', () => {
+      if (longPressTimer) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+      }
+    });
+  });
+
+  // Click outside to exit edit mode
+  document.addEventListener('click', (e) => {
+    if (editMode && !dock.contains(e.target)) {
+      exitEditMode();
+    }
+  });
+
+  // Magnification effect
+  dock.addEventListener('mouseenter', () => {
+    if (!editMode) {
+      dock.style.paddingTop = `${EXPANDED_PADDING}px`;
+      dock.style.paddingBottom = `${EXPANDED_PADDING}px`;
+    }
+  });
+
+  dock.addEventListener('mousemove', (e) => {
+    if (editMode) return; // Disable magnification in edit mode
+
+    const mouseX = e.clientX;
+    const dockItems = Array.from(dock.querySelectorAll('.dock-item'));
+
+    dockItems.forEach((item) => {
+      const itemRect = item.getBoundingClientRect();
+      const itemCenterX = itemRect.left + itemRect.width / 2;
+      const distance = Math.abs(mouseX - itemCenterX);
+
+      let scale = 1;
+      if (distance < INFLUENCE_RANGE) {
+        const normalizedDistance = distance / INFLUENCE_RANGE;
+        scale = 1 + (MAX_SCALE - 1) * (1 - normalizedDistance);
+      }
+
+      item.style.transform = `scale(${scale})`;
+      item.style.width = `${BASE_SIZE}px`;
+      item.style.height = `${BASE_SIZE * scale}px`;
+    });
+  });
+
+  dock.addEventListener('mouseleave', () => {
+    dock.style.paddingTop = '16px';
+    dock.style.paddingBottom = '16px';
+
+    dock.querySelectorAll('.dock-item').forEach((item) => {
+      item.style.transform = 'scale(1)';
+      item.style.width = `${BASE_SIZE}px`;
+      item.style.height = `${BASE_SIZE}px`;
+    });
+  });
+
+  // Setup dock as drop zone for apps from drawer
+  dock.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    dock.classList.add('dock-drag-over');
+  });
+
+  dock.addEventListener('dragleave', (e) => {
+    if (e.target === dock) {
+      dock.classList.remove('dock-drag-over');
+    }
+  });
+
+  dock.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dock.classList.remove('dock-drag-over');
+
+    try {
+      const appData = JSON.parse(e.dataTransfer.getData('application/json'));
+
+      // Only allow 1×1 apps
+      if (appData.cols === 1 && appData.rows === 1 && appData.type === 'app') {
+        addAppToDock(appData);
+      } else {
+        alert('Only 1×1 apps can be added to the dock.');
+      }
+    } catch (error) {
+      console.error('Error parsing dropped app:', error);
+    }
+  });
+
+  // Add app to dock
+  function addAppToDock(appData) {
+    // Check if app already exists
+    const existingApp = dock.querySelector(`[data-app="${appData.id}"]`);
+    if (existingApp) {
+      alert(`${appData.name} is already in the dock.`);
+      return;
+    }
+
+    // Create new dock item
+    const dockItem = document.createElement('div');
+    dockItem.className = 'dock-item';
+    dockItem.dataset.app = appData.id;
+
+    const dockIcon = document.createElement('div');
+    dockIcon.className = 'dock-icon';
+    dockIcon.textContent = appData.icon;
+
+    dockItem.appendChild(dockIcon);
+
+    // Insert before settings (last item, which is permanent)
+    const lastItem = dock.lastElementChild;
+    dock.insertBefore(dockItem, lastItem);
+
+    // Setup long-press for the new item
+    setupLongPressForItem(dockItem);
+
+    // Save dock order
+    saveDockOrder();
+
+    console.log(`Added ${appData.name} to dock`);
+  }
+
+  // Setup long-press for a single item
+  function setupLongPressForItem(dockItem) {
+    if (dockItem.dataset.permanent === 'true') return;
+
+    const icon = dockItem.querySelector('.dock-icon');
+    if (!icon) return;
+
+    icon.addEventListener('mousedown', () => {
+      if (!editMode) {
+        longPressTimer = setTimeout(() => {
+          enterEditMode();
+        }, 2000);
+      }
+    });
+
+    icon.addEventListener('mouseup', () => {
+      if (longPressTimer) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+      }
+    });
+
+    icon.addEventListener('mouseleave', () => {
+      if (longPressTimer) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+      }
+    });
+  }
+
+  // Initialize
+  initSortable();
+}

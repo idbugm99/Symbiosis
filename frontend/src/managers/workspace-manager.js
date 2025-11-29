@@ -7,7 +7,7 @@ import { StorageManager } from './storage-manager.js';
 
 export class WorkspaceManager {
   constructor(options = {}) {
-    this.storageManager = new StorageManager();
+    this.storageManager = options.storageManager || new StorageManager();
 
     // Callbacks for integrating with other managers
     this.onWorkspaceSwitch = options.onWorkspaceSwitch || (() => {});
@@ -21,10 +21,13 @@ export class WorkspaceManager {
     this.workspaces = this.loadAllWorkspaces();
     this.currentWorkspaceId = this.loadCurrentWorkspaceId();
     this.dropdownOpen = false;
+
+    // Setup button event listeners (needs to be called after DOM is ready)
+    setTimeout(() => this.setupWorkspaceButtons(), 0);
   }
 
   /**
-   * Load all workspaces from storage or create defaults
+   * Load all workspaces from storage (blank slate - no defaults)
    * @returns {Array} Array of workspace objects
    */
   loadAllWorkspaces() {
@@ -34,12 +37,9 @@ export class WorkspaceManager {
       return saved;
     }
 
-    // Default workspaces if none exist
-    return [
-      { id: 'workspace-1', name: 'Default', widgets: [], lastModified: new Date().toISOString() },
-      { id: 'workspace-2', name: 'Lab Work', widgets: [], lastModified: new Date().toISOString() },
-      { id: 'workspace-3', name: 'Research', widgets: [], lastModified: new Date().toISOString() }
-    ];
+    // Start with blank slate (no default workspaces)
+    // User can create workspaces manually or edit temp-data-file.js
+    return [];
   }
 
   /**
@@ -123,21 +123,15 @@ export class WorkspaceManager {
   }
 
   /**
-   * Create a new workspace
+   * Create a new workspace (auto-named "New workspace")
    */
   createNewWorkspace() {
-    const name = prompt('Enter workspace name:');
-
-    if (!name || name.trim() === '') {
-      return;
-    }
-
     // Generate new workspace ID
     const newId = `workspace-${Date.now()}`;
 
     const newWorkspace = {
       id: newId,
-      name: name.trim(),
+      name: 'New workspace',
       widgets: [],
       lastModified: new Date().toISOString()
     };
@@ -148,41 +142,110 @@ export class WorkspaceManager {
     // Switch to new workspace
     this.switchWorkspace(newId);
 
-    console.log('Created new workspace:', name);
+    console.log('Created new workspace: New workspace');
   }
 
   /**
-   * Rename a workspace
-   * @param {string} workspaceId - ID of workspace to rename
+   * Start inline editing of workspace name
+   */
+  startInlineRename() {
+    const nameElement = document.getElementById('workspace-name');
+    if (!nameElement) return;
+
+    const currentWorkspace = this.getCurrentWorkspace();
+    const currentName = currentWorkspace.name;
+
+    // Replace text with input
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'workspace-name-input';
+    input.value = currentName;
+    input.id = 'workspace-name-input';
+
+    // Replace element
+    nameElement.replaceWith(input);
+
+    // Focus and select all
+    input.focus();
+    input.select();
+
+    // Save on Enter
+    const handleSave = () => {
+      const newName = input.value.trim();
+      if (newName && newName !== currentName) {
+        currentWorkspace.name = newName;
+        currentWorkspace.lastModified = new Date().toISOString();
+        this.saveAllWorkspaces();
+        console.log('Renamed workspace to:', newName);
+      }
+      this.updateWorkspaceUI();
+    };
+
+    // Cancel on Escape
+    const handleCancel = () => {
+      this.updateWorkspaceUI();
+    };
+
+    // Keyboard handlers
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        handleSave();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        handleCancel();
+      }
+    });
+
+    // Save on blur (click outside)
+    input.addEventListener('blur', handleSave);
+  }
+
+  /**
+   * Rename a workspace (DEPRECATED - using inline editing now)
    */
   renameWorkspace(workspaceId) {
-    const workspace = this.workspaces.find(w => w.id === workspaceId);
-    if (!workspace) {
-      console.error('Workspace not found:', workspaceId);
-      return;
-    }
-
-    const newName = prompt('Enter new workspace name:', workspace.name);
-
-    if (!newName || newName.trim() === '' || newName.trim() === workspace.name) {
-      return;
-    }
-
-    // Update workspace name
-    workspace.name = newName.trim();
-    workspace.lastModified = new Date().toISOString();
-
-    // Save changes
-    this.saveAllWorkspaces();
-
-    // Update UI
-    this.updateWorkspaceUI();
-
-    console.log('Renamed workspace to:', newName);
+    this.startInlineRename();
   }
 
   /**
-   * Toggle workspace dropdown menu
+   * Delete current workspace
+   * Validates that workspace is empty and not the last one
+   */
+  deleteCurrentWorkspace() {
+    const currentWorkspace = this.getCurrentWorkspace();
+
+    // Can't delete last workspace
+    if (this.workspaces.length === 1) {
+      alert('Cannot delete the last workspace. You must have at least one workspace.');
+      return false;
+    }
+
+    // Check if workspace has widgets
+    const widgets = this.getWidgets();
+    if (widgets && widgets.length > 0) {
+      alert(`Cannot delete workspace with widgets.\n\nThis workspace contains ${widgets.length} widget(s).\nPlease move or delete the widgets first.`);
+      return false;
+    }
+
+    // Confirm deletion
+    if (!confirm(`Delete workspace "${currentWorkspace.name}"?\n\nThis action cannot be undone.`)) {
+      return false;
+    }
+
+    // Remove workspace
+    this.workspaces = this.workspaces.filter(w => w.id !== this.currentWorkspaceId);
+    this.saveAllWorkspaces();
+
+    // Switch to first remaining workspace
+    this.switchWorkspace(this.workspaces[0].id);
+
+    console.log('Deleted workspace:', currentWorkspace.name);
+    return true;
+  }
+
+  /**
+   * Toggle workspace dropdown menu (DEPRECATED - keeping for compatibility)
    */
   toggleWorkspaceDropdown() {
     this.dropdownOpen = !this.dropdownOpen;
@@ -226,23 +289,46 @@ export class WorkspaceManager {
    */
   updateWorkspaceUI() {
     const currentWorkspace = this.getCurrentWorkspace();
-    document.getElementById('current-workspace-name').textContent = currentWorkspace.name;
-    this.renderWorkspaceIndicators();
-    this.renderWorkspaceDropdown();
+
+    // Check if we're currently in edit mode (input exists)
+    const inputElement = document.getElementById('workspace-name-input');
+    if (inputElement) {
+      // Replace input with the name element
+      const nameElement = document.createElement('div');
+      nameElement.className = 'workspace-name';
+      nameElement.id = 'workspace-name';
+      nameElement.innerHTML = `${currentWorkspace.name}<div class="workspace-name-tooltip">Click and hold to rename workspace.</div>`;
+      inputElement.replaceWith(nameElement);
+    } else {
+      // Normal update of existing name element
+      const nameElement = document.getElementById('workspace-name');
+      if (nameElement) {
+        // Preserve the tooltip element
+        const tooltip = nameElement.querySelector('.workspace-name-tooltip');
+        if (tooltip) {
+          nameElement.innerHTML = `${currentWorkspace.name}<div class="workspace-name-tooltip">Click and hold to rename workspace.</div>`;
+        } else {
+          nameElement.innerHTML = `${currentWorkspace.name}<div class="workspace-name-tooltip">Click and hold to rename workspace.</div>`;
+        }
+      }
+    }
+
+    this.renderWorkspaceDots();
+    this.setupWorkspaceNameLongPress();
   }
 
   /**
-   * Render workspace indicator dots
+   * Render workspace dots with click handlers and tooltips
    */
-  renderWorkspaceIndicators() {
-    const container = document.getElementById('workspace-indicators');
+  renderWorkspaceDots() {
+    const container = document.getElementById('workspace-dots');
     if (!container) return;
 
     container.innerHTML = '';
 
-    this.workspaces.forEach(workspace => {
+    this.workspaces.forEach((workspace, index) => {
       const dot = document.createElement('div');
-      dot.className = 'workspace-indicator';
+      dot.className = 'workspace-dot';
       dot.dataset.workspaceName = workspace.name;
       dot.dataset.workspaceId = workspace.id;
 
@@ -250,12 +336,34 @@ export class WorkspaceManager {
         dot.classList.add('active');
       }
 
+      // Create tooltip element
+      const tooltip = document.createElement('div');
+      tooltip.className = 'workspace-dot-tooltip';
+      const shortcutKey = index + 1;
+      tooltip.textContent = `${workspace.name} (Ctrl+${shortcutKey})`;
+      dot.appendChild(tooltip);
+
+      // Tooltip hover with 2-second delay
+      let tooltipTimer = null;
+
+      dot.addEventListener('mouseenter', () => {
+        tooltipTimer = setTimeout(() => {
+          dot.classList.add('show-tooltip');
+        }, 2000);
+      });
+
+      dot.addEventListener('mouseleave', () => {
+        if (tooltipTimer) {
+          clearTimeout(tooltipTimer);
+          tooltipTimer = null;
+        }
+        dot.classList.remove('show-tooltip');
+      });
+
+      // Click to switch workspace
       dot.addEventListener('click', (e) => {
         e.stopPropagation();
         this.switchWorkspace(workspace.id);
-        if (this.dropdownOpen) {
-          this.toggleWorkspaceDropdown();
-        }
       });
 
       container.appendChild(dot);
@@ -263,49 +371,89 @@ export class WorkspaceManager {
   }
 
   /**
-   * Render workspace dropdown menu
+   * Setup long-press handler for workspace name (rename)
    */
-  renderWorkspaceDropdown() {
-    const container = document.getElementById('workspace-menu-list');
-    if (!container) return;
+  setupWorkspaceNameLongPress() {
+    const nameElement = document.getElementById('workspace-name');
+    if (!nameElement) return;
 
-    container.innerHTML = '';
+    let pressTimer = null;
+    let tooltipTimer = null;
 
-    this.workspaces.forEach(workspace => {
-      const item = document.createElement('div');
-      item.className = 'workspace-menu-item';
+    // Remove old listeners by cloning
+    const newElement = nameElement.cloneNode(true);
+    nameElement.replaceWith(newElement);
+    const newNameElement = document.getElementById('workspace-name');
 
-      if (workspace.id === this.currentWorkspaceId) {
-        item.classList.add('active');
+    const handlePressStart = (e) => {
+      e.preventDefault();
+
+      // Start long-press timer (500ms)
+      pressTimer = setTimeout(() => {
+        newNameElement.classList.add('long-press-active');
+        this.startInlineRename();
+      }, 500);
+    };
+
+    const handlePressEnd = (e) => {
+      // Clear timer if released before 500ms
+      if (pressTimer) {
+        clearTimeout(pressTimer);
+        pressTimer = null;
       }
+      newNameElement.classList.remove('long-press-active');
+    };
 
-      // Create name container with checkmark for active workspace
-      const nameContainer = document.createElement('div');
-      nameContainer.className = 'workspace-menu-item-name';
-      nameContainer.textContent = workspace.name;
+    // Tooltip hover handlers (2 second delay)
+    const handleMouseEnter = () => {
+      console.log('🖱️ Mouse entered workspace name - tooltip will show in 2s');
+      // Show tooltip after 2 seconds
+      tooltipTimer = setTimeout(() => {
+        console.log('✅ Showing tooltip');
+        newNameElement.classList.add('show-tooltip');
+      }, 2000);
+    };
 
-      // Create edit icon
-      const editIcon = document.createElement('span');
-      editIcon.className = 'workspace-menu-item-edit';
-      editIcon.textContent = '✏️';
-      editIcon.title = 'Rename workspace';
+    const handleMouseLeave = () => {
+      console.log('🖱️ Mouse left workspace name - hiding tooltip');
+      // Clear tooltip timer and hide tooltip
+      if (tooltipTimer) {
+        clearTimeout(tooltipTimer);
+        tooltipTimer = null;
+      }
+      newNameElement.classList.remove('show-tooltip');
+    };
 
-      // Edit icon click handler (prevent workspace switch)
-      editIcon.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.renameWorkspace(workspace.id);
+    // Add new listeners
+    newNameElement.addEventListener('mousedown', handlePressStart);
+    newNameElement.addEventListener('mouseup', handlePressEnd);
+    newNameElement.addEventListener('mouseleave', handlePressEnd);
+    newNameElement.addEventListener('touchstart', handlePressStart);
+    newNameElement.addEventListener('touchend', handlePressEnd);
+
+    // Add tooltip hover listeners
+    newNameElement.addEventListener('mouseenter', handleMouseEnter);
+    newNameElement.addEventListener('mouseleave', handleMouseLeave);
+  }
+
+  /**
+   * Setup event listeners for workspace buttons
+   */
+  setupWorkspaceButtons() {
+    // Add workspace button
+    const addBtn = document.getElementById('workspace-add-btn');
+    if (addBtn) {
+      addBtn.addEventListener('click', () => {
+        this.createNewWorkspace();
       });
+    }
 
-      // Workspace item click handler (switch workspace)
-      item.addEventListener('click', (e) => {
-        e.stopPropagation();
-        this.switchWorkspace(workspace.id);
-        this.toggleWorkspaceDropdown();
+    // Delete workspace button
+    const deleteBtn = document.getElementById('workspace-delete-btn');
+    if (deleteBtn) {
+      deleteBtn.addEventListener('click', () => {
+        this.deleteCurrentWorkspace();
       });
-
-      item.appendChild(nameContainer);
-      item.appendChild(editIcon);
-      container.appendChild(item);
-    });
+    }
   }
 }
