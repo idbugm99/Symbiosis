@@ -17,6 +17,7 @@
     "axios": "^1.6.2",
     "firebase": "^10.7.1",
     "handlebars": "^4.7.8",
+    "phoenix-core": "file:../../phoenix-core",
     "sortablejs": "^1.15.6",
     "vite-plugin-handlebars": "^2.0.0"
   },
