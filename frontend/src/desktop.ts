@@ -1,14 +1,10 @@
 // Symbiosis Desktop Manager (Refactored)
 // Uses orchestrators for initialization, dock management, and memory management
 
-// Import from phoenix-core
-import {
-  DesktopInitializer,
-  DesktopDockOrchestrator,
-  DesktopMemoryManager
-} from 'phoenix-core';
+// TEMPORARY: Using local managers until phoenix-core supports config injection
+// Import HMR guard early to prevent infinite retry loops
+import './utils/vite-hmr-guard.js';
 
-// Import Symbiosis-specific data
 import {
   availableApps,
   gridConfig,
@@ -16,8 +12,12 @@ import {
   getWidgetById
 } from './data/widgets-static.js';
 
-// Import logger from phoenix-core
-import { createLogger } from 'phoenix-core';
+import { createLogger } from './utils/logger.js';
+
+// Orchestrators (local copies for now)
+import { DesktopInitializer } from './orchestrators/desktop-initializer.js';
+import { DesktopDockOrchestrator } from './orchestrators/desktop-dock-orchestrator.js';
+import { DesktopMemoryManager } from './orchestrators/desktop-memory-manager.js';
 
 const logger = createLogger('DesktopManager');
 
