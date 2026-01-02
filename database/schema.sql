@@ -10,7 +10,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 CREATE TABLE users (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  firebase_uid VARCHAR(128) UNIQUE NOT NULL,
+  appwrite_user_id VARCHAR(128) UNIQUE NOT NULL,
   email VARCHAR(255) UNIQUE NOT NULL,
   display_name VARCHAR(255),
   role VARCHAR(50) DEFAULT 'user', -- user, researcher, supervisor, admin
@@ -21,9 +21,21 @@ CREATE TABLE users (
   is_active BOOLEAN DEFAULT true
 );
 
-CREATE INDEX idx_users_firebase_uid ON users(firebase_uid);
+CREATE INDEX idx_users_appwrite_uid ON users(appwrite_user_id);
 CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_users_role ON users(role);
+
+-- User menu bar preferences
+CREATE TABLE user_menubar_preferences (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  config JSONB NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(user_id)
+);
+
+CREATE INDEX idx_user_menubar_user_id ON user_menubar_preferences(user_id);
 
 -- ============================================================
 -- CHEMICALS MANAGEMENT
@@ -297,6 +309,9 @@ END;
 $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
+FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_user_menubar_preferences_updated_at BEFORE UPDATE ON user_menubar_preferences
 FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
 CREATE TRIGGER update_chemicals_updated_at BEFORE UPDATE ON chemicals

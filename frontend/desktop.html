@@ -7,12 +7,272 @@
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="stylesheet" href="/src/styles/main.css">
   <link rel="stylesheet" href="/src/styles/desktop.css">
+  <link rel="stylesheet" href="/src/styles/widgets.css">
+  <link rel="stylesheet" href="/src/styles/app-windows.css">
+  <link rel="stylesheet" href="/src/widgets/EquipmentWidget.css">
+  
+  <!-- Vite HMR Guard: Prevents infinite retry loops when server is down -->
+  <script>
+    (function() {
+      'use strict';
+      if (typeof window === 'undefined') return;
+      
+      const MAX_FAILURES = 5;
+      const RESET_DELAY = 60000; // 60 seconds
+      let failureCount = 0;
+      let lastFailure = 0;
+      let guardActive = false;
+      let successCount = 0;
+      
+      // Helper functions
+      function handleFailure() {
+        const now = Date.now();
+        
+        // Reset counter after delay
+        if (now - lastFailure > RESET_DELAY) {
+          failureCount = 0;
+          guardActive = false;
+          successCount = 0;
+        }
+        
+        lastFailure = now;
+        failureCount++;
+        
+        if (failureCount >= MAX_FAILURES && !guardActive) {
+          guardActive = true;
+          console.warn(
+            '⚠️ ViteHmrGuard: Disabled HMR after ' + MAX_FAILURES + ' consecutive failures. ' +
+            'HMR will remain disabled for ' + (RESET_DELAY / 1000) + ' seconds to prevent memory issues. ' +
+            'Refresh page when server is back online.'
+          );
+          
+          // Show server outage modal
+          showServerOutageNotification();
+          
+          // Reset after delay
+          setTimeout(function() {
+            guardActive = false;
+            failureCount = 0;
+            successCount = 0;
+            console.info('ViteHmrGuard: Reset. HMR can reconnect.');
+          }, RESET_DELAY);
+        } else if (failureCount < MAX_FAILURES) {
+          console.warn('ViteHmrGuard: Connection failure ' + failureCount + '/' + MAX_FAILURES);
+        }
+      }
+      
+      function handleSuccess() {
+        if (failureCount > 0 || guardActive) {
+          console.info('ViteHmrGuard: Connection restored. Resetting failure counter.');
+        }
+        failureCount = 0;
+        guardActive = false;
+        successCount++;
+      }
+      
+      // Intercept WebSocket creation for HMR (must be done before Vite loads)
+      const OriginalWebSocket = window.WebSocket;
+      
+      window.WebSocket = function(url, protocols) {
+        const urlStr = typeof url === 'string' ? url : (url instanceof URL ? url.href : String(url));
+        
+        // Only intercept Vite HMR WebSocket connections (port 3003 or vite-specific patterns)
+        const isViteHmr = urlStr.includes('localhost:3003') || 
+                         urlStr.includes(':3003') ||
+                         (urlStr.includes('localhost') && urlStr.includes('/?token='));
+        
+        if (isViteHmr) {
+          const now = Date.now();
+          
+          // Reset counter after delay
+          if (now - lastFailure > RESET_DELAY) {
+            failureCount = 0;
+            guardActive = false;
+            successCount = 0;
+          }
+          
+          // If guard is active, block connection attempts
+          if (guardActive) {
+            console.warn('ViteHmrGuard: Blocking HMR WebSocket (server down, ' + 
+                        Math.ceil((RESET_DELAY - (now - lastFailure)) / 1000) + 's until retry)');
+            // Return a dummy WebSocket that fails immediately
+            const dummy = new OriginalWebSocket('ws://localhost:1');
+            setTimeout(function() { 
+              try { 
+                dummy.close(); 
+              } catch(e) {
+                // Ignore close errors
+              } 
+            }, 0);
+            return dummy;
+          }
+          
+          // Try to create connection and monitor for failures
+          try {
+            const ws = new OriginalWebSocket(url, protocols);
+            
+            // Track connection errors
+            ws.addEventListener('error', handleFailure);
+            
+            // Reset counters on successful connection
+            ws.addEventListener('open', handleSuccess);
+            
+            return ws;
+          } catch (e) {
+            // If WebSocket creation fails immediately, handle failure
+            handleFailure();
+            throw e;
+          }
+        }
+        
+        // For non-HMR WebSockets, use original constructor
+        return new OriginalWebSocket(url, protocols);
+      };
+      
+      // Preserve WebSocket prototype and static properties
+      Object.setPrototypeOf(window.WebSocket, OriginalWebSocket);
+      Object.setPrototypeOf(window.WebSocket.prototype, OriginalWebSocket.prototype);
+      Object.defineProperty(window.WebSocket, 'CONNECTING', { value: 0, writable: false });
+      Object.defineProperty(window.WebSocket, 'OPEN', { value: 1, writable: false });
+      Object.defineProperty(window.WebSocket, 'CLOSING', { value: 2, writable: false });
+      Object.defineProperty(window.WebSocket, 'CLOSED', { value: 3, writable: false });
+      
+      // Intercept fetch requests (Vite uses fetch for polling when server is down)
+      const OriginalFetch = window.fetch;
+      window.fetch = function(input, init) {
+        const url = typeof input === 'string' ? input : (input instanceof Request ? input.url : String(input));
+        
+        // Check if this is a Vite dev server request
+        const isViteRequest = url.includes('localhost:3002') || 
+                             url.includes('localhost:3003') ||
+                             url.includes(':3002/') ||
+                             url.includes(':3003/');
+        
+        if (isViteRequest) {
+          const now = Date.now();
+          
+          // Reset counter after delay
+          if (now - lastFailure > RESET_DELAY) {
+            failureCount = 0;
+            guardActive = false;
+            successCount = 0;
+          }
+          
+          // If guard is active, block fetch requests to prevent polling
+          if (guardActive) {
+            // Silently reject to prevent console spam
+            return Promise.reject(new Error('ViteHmrGuard: Server unavailable'));
+          }
+          
+          // Try fetch and monitor for failures
+          return OriginalFetch.apply(this, arguments)
+            .then(function(response) {
+              if (response.ok) {
+                handleSuccess();
+              } else {
+                handleFailure();
+              }
+              return response;
+            })
+            .catch(function(error) {
+              handleFailure();
+              throw error;
+            });
+        }
+        
+        // For non-Vite requests, use original fetch
+        return OriginalFetch.apply(this, arguments);
+      };
+      
+      // Show server outage notification modal
+      function showServerOutageNotification() {
+        // Check if modal already exists
+        if (document.getElementById('server-outage-modal-overlay')) {
+          return;
+        }
+        
+        // Create modal overlay
+        const overlay = document.createElement('div');
+        overlay.id = 'server-outage-modal-overlay';
+        overlay.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(4px); z-index: 10000; display: flex; align-items: center; justify-content: center; animation: fadeIn 0.2s ease;';
+        
+        // Create modal
+        const modal = document.createElement('div');
+        modal.id = 'server-outage-modal';
+        modal.style.cssText = 'background: white; border-radius: 18px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3); max-width: 500px; width: 90%; padding: 32px; animation: slideUp 0.3s ease;';
+        
+        modal.innerHTML = '<div style="text-align: center; margin-bottom: 24px;"><div style="font-size: 48px; margin-bottom: 16px;">⚠️</div><h2 style="margin: 0 0 8px 0; font-size: 24px; font-weight: 700; color: #1f2937;">Server Connection Lost</h2><p style="margin: 0; color: #6b7280; font-size: 15px; line-height: 1.5;">The development server appears to be unavailable. Your work is safe, but hot reloading has been disabled to prevent memory issues.</p></div><div style="background: #fef3c7; border: 1px solid #fde68a; border-radius: 12px; padding: 16px; margin-bottom: 24px;"><p style="margin: 0; color: #92400e; font-size: 14px; line-height: 1.5;"><strong>What happened?</strong><br>The connection to the development server was lost. This usually means the server was stopped or crashed.</p></div><div style="display: flex; gap: 12px; justify-content: flex-end;"><button id="server-outage-acknowledge" style="padding: 10px 20px; border: 1px solid #d1d5db; background: white; border-radius: 8px; font-size: 14px; font-weight: 600; color: #374151; cursor: pointer; transition: all 0.2s ease;">Continue Working</button><button id="server-outage-logout" style="padding: 10px 20px; border: none; background: #dc2626; border-radius: 8px; font-size: 14px; font-weight: 600; color: white; cursor: pointer; transition: all 0.2s ease;">Logout</button></div>';
+        
+        // Add styles if not already added
+        if (!document.getElementById('server-outage-modal-styles')) {
+          const style = document.createElement('style');
+          style.id = 'server-outage-modal-styles';
+          style.textContent = '@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } } @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } } @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } } @keyframes slideDown { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(20px); } } #server-outage-acknowledge:hover { background: #f9fafb; border-color: #9ca3af; } #server-outage-logout:hover { background: #b91c1c; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3); } #server-outage-acknowledge:active, #server-outage-logout:active { transform: scale(0.98); }';
+          document.head.appendChild(style);
+        }
+        
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+        
+        // Button handlers
+        const acknowledgeBtn = modal.querySelector('#server-outage-acknowledge');
+        const logoutBtn = modal.querySelector('#server-outage-logout');
+        
+        acknowledgeBtn?.addEventListener('click', function() {
+          closeModal();
+          console.log('User acknowledged server outage. Continuing to work offline.');
+        });
+        
+        logoutBtn?.addEventListener('click', function() {
+          closeModal();
+          console.log('User chose to logout due to server outage.');
+          
+          // Clear session data from localStorage (keep user preferences if desired)
+          // Clear workspace and widget data since server is down
+          const keysToRemove = [];
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && (key.startsWith('symbiosis-') || key.includes('workspace') || key.includes('widget'))) {
+              keysToRemove.push(key);
+            }
+          }
+          keysToRemove.forEach(function(key) {
+            localStorage.removeItem(key);
+          });
+          
+          // Redirect to login page
+          // Note: In production, you'd want to call authService.logout() first
+          // but since server is down, we'll just clear local data and redirect
+          setTimeout(function() {
+            window.location.href = '/pages/login.html';
+          }, 300);
+        });
+        
+        // Close on overlay click
+        overlay.addEventListener('click', function(e) {
+          if (e.target === overlay) {
+            closeModal();
+          }
+        });
+        
+        function closeModal() {
+          overlay.style.animation = 'fadeOut 0.2s ease';
+          modal.style.animation = 'slideDown 0.2s ease';
+          setTimeout(function() {
+            overlay.remove();
+          }, 200);
+        }
+      }
+      
+      console.log('ViteHmrGuard: Initialized (max failures: ' + MAX_FAILURES + ')');
+    })();
+  </script>
 </head>
 <body>
   <div class="desktop-container">
 
     <!-- Top Bar -->
-    <div class="desktop-topbar">
+    <div class="desktop-topbar" id="top-bar">
       <div class="topbar-left">
         <div class="topbar-logo">
           🔬 Symbiosis
@@ -167,14 +427,20 @@
 
     <div class="drawer-header">
       <div class="drawer-tabs">
-        <button class="drawer-tab active" data-tab="widgets">Widgets</button>
-        <button class="drawer-tab" data-tab="apps">Apps</button>
+        <button class="drawer-tab active" id="tab-widgets" data-tab="widgets">Widgets</button>
+        <button class="drawer-tab" id="tab-apps" data-tab="apps">Apps</button>
       </div>
+      <button class="drawer-close-btn" id="close-drawer-btn" title="Close">✕</button>
       <p class="drawer-subtitle">Drag items to your desktop to customize your workspace</p>
     </div>
 
-    <div class="drawer-content" id="drawer-content">
-      <!-- Widget categories will be dynamically generated from widgets-static.js -->
+    <div class="drawer-content">
+      <div class="drawer-tab-content active" id="widgets-content">
+        <!-- Widgets will be dynamically generated -->
+      </div>
+      <div class="drawer-tab-content" id="apps-content">
+        <!-- Apps will be dynamically generated -->
+      </div>
     </div>
   </div>
 
@@ -196,6 +462,6 @@
     </div>
   </div>
 
-  <script type="module" src="/src/desktop.js"></script>
+  <script type="module" src="/src/desktop.ts"></script>
 </body>
 </html>

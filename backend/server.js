@@ -13,6 +13,7 @@ import { requestLogger } from './app/middleware/requestLogger.js';
 import { authMiddleware } from './app/middleware/auth.js';
 
 // Import routes
+import authRoutes from './app/routes/auth.js';
 import chemicalsRoutes from './app/routes/chemicals.js';
 import equipmentRoutes from './app/routes/equipment.js';
 import experimentsRoutes from './app/routes/experiments.js';
@@ -20,7 +21,6 @@ import usersRoutes from './app/routes/users.js';
 import healthRoutes from './app/routes/health.js';
 
 // Import services
-import { initializeFirebaseAdmin } from './app/services/firebase.js';
 import { logger } from './app/utils/logger.js';
 
 // Load environment variables
@@ -31,9 +31,6 @@ const __dirname = dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-
-// Initialize Firebase Admin
-initializeFirebaseAdmin();
 
 // Security middleware
 app.use(helmet());
@@ -62,6 +59,9 @@ app.use(requestLogger);
 
 // Health check route (no auth required)
 app.use('/health', healthRoutes);
+
+// Authentication routes (handle their own auth)
+app.use('/api/auth', authRoutes);
 
 // API routes (with authentication)
 app.use('/api/chemicals', authMiddleware, chemicalsRoutes);

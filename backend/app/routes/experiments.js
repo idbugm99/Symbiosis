@@ -1,6 +1,6 @@
 import express from 'express';
-import { logger } from '../utils/logger.js';
 import { authorize } from '../middleware/auth.js';
+import ExperimentsService from '../services/ExperimentsService.js';
 
 const router = express.Router();
 
@@ -10,19 +10,11 @@ const router = express.Router();
  */
 router.get('/', async (req, res, next) => {
   try {
-    const { status, userId, limit = 50, offset = 0 } = req.query;
-
-    // TODO: Implement database query
-    const experiments = [];
+    const result = await ExperimentsService.getAll(req.query);
 
     res.json({
       success: true,
-      data: experiments,
-      pagination: {
-        limit: parseInt(limit),
-        offset: parseInt(offset),
-        total: 0
-      }
+      ...result
     });
   } catch (error) {
     next(error);
@@ -36,9 +28,7 @@ router.get('/', async (req, res, next) => {
 router.get('/:id', async (req, res, next) => {
   try {
     const { id } = req.params;
-
-    // TODO: Implement database query
-    const experiment = null;
+    const experiment = await ExperimentsService.getById(id);
 
     if (!experiment) {
       return res.status(404).json({
@@ -63,17 +53,9 @@ router.get('/:id', async (req, res, next) => {
 router.post('/', authorize(['admin', 'researcher', 'supervisor']), async (req, res, next) => {
   try {
     const experimentData = req.body;
+    const userId = req.user.uid;
 
-    // TODO: Validate and insert into database
-    const newExperiment = {
-      id: Date.now(),
-      ...experimentData,
-      createdBy: req.user.uid,
-      createdAt: new Date().toISOString(),
-      status: 'draft'
-    };
-
-    logger.info(`Experiment created by ${req.user.email}:`, newExperiment.id);
+    const newExperiment = await ExperimentsService.create(experimentData, userId);
 
     res.status(201).json({
       success: true,
@@ -92,13 +74,34 @@ router.put('/:id', authorize(['admin', 'researcher', 'supervisor']), async (req,
   try {
     const { id } = req.params;
     const updateData = req.body;
+    const userId = req.user.uid;
 
-    // TODO: Update in database
-    logger.info(`Experiment ${id} updated by ${req.user.email}`);
+    const updatedExperiment = await ExperimentsService.update(id, updateData, userId);
 
     res.json({
       success: true,
+      data: updatedExperiment,
       message: 'Experiment updated successfully'
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * Delete experiment
+ * DELETE /api/experiments/:id
+ */
+router.delete('/:id', authorize(['admin']), async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.uid;
+
+    await ExperimentsService.delete(id, userId);
+
+    res.json({
+      success: true,
+      message: 'Experiment deleted successfully'
     });
   } catch (error) {
     next(error);

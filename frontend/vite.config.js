@@ -36,13 +36,33 @@ export default defineConfig({
     }
   },
   server: {
-    port: 3000,
+    port: 3002,
     open: true,
+    hmr: {
+      // Limit HMR retry attempts to prevent infinite loops when server is down
+      maxRetries: 5,
+      // Increase delay between retries to reduce load
+      overlay: true
+    },
     proxy: {
       '/api': {
         target: 'http://localhost:5000',
         changeOrigin: true,
-        secure: false
+        secure: false,
+        // Prevent proxy from retrying indefinitely
+        timeout: 10000,
+        // Don't retry on connection errors
+        configure: (proxy, _options) => {
+          proxy.on('error', (err, _req, res) => {
+            // Stop retrying after error
+            if (res && !res.headersSent) {
+              res.writeHead(500, {
+                'Content-Type': 'text/plain'
+              });
+              res.end('Proxy error: Server connection failed');
+            }
+          });
+        }
       }
     }
   }

@@ -1,6 +1,6 @@
 import express from 'express';
-import { logger } from '../utils/logger.js';
 import { authorize } from '../middleware/auth.js';
+import ChemicalsService from '../services/ChemicalsService.js';
 
 const router = express.Router();
 
@@ -10,20 +10,11 @@ const router = express.Router();
  */
 router.get('/', async (req, res, next) => {
   try {
-    const { search, category, limit = 50, offset = 0 } = req.query;
-
-    // TODO: Implement database query
-    // This is a placeholder response
-    const chemicals = [];
+    const result = await ChemicalsService.getAll(req.query);
 
     res.json({
       success: true,
-      data: chemicals,
-      pagination: {
-        limit: parseInt(limit),
-        offset: parseInt(offset),
-        total: 0
-      }
+      ...result
     });
   } catch (error) {
     next(error);
@@ -37,9 +28,7 @@ router.get('/', async (req, res, next) => {
 router.get('/:id', async (req, res, next) => {
   try {
     const { id } = req.params;
-
-    // TODO: Implement database query
-    const chemical = null;
+    const chemical = await ChemicalsService.getById(id);
 
     if (!chemical) {
       return res.status(404).json({
@@ -64,16 +53,9 @@ router.get('/:id', async (req, res, next) => {
 router.post('/', authorize(['admin', 'researcher']), async (req, res, next) => {
   try {
     const chemicalData = req.body;
+    const userId = req.user.uid;
 
-    // TODO: Validate and insert into database
-    const newChemical = {
-      id: Date.now(), // Temporary ID
-      ...chemicalData,
-      createdBy: req.user.uid,
-      createdAt: new Date().toISOString()
-    };
-
-    logger.info(`Chemical created by ${req.user.email}:`, newChemical.id);
+    const newChemical = await ChemicalsService.create(chemicalData, userId);
 
     res.status(201).json({
       success: true,
@@ -92,12 +74,13 @@ router.put('/:id', authorize(['admin', 'researcher']), async (req, res, next) =>
   try {
     const { id } = req.params;
     const updateData = req.body;
+    const userId = req.user.uid;
 
-    // TODO: Update in database
-    logger.info(`Chemical ${id} updated by ${req.user.email}`);
+    const updatedChemical = await ChemicalsService.update(id, updateData, userId);
 
     res.json({
       success: true,
+      data: updatedChemical,
       message: 'Chemical updated successfully'
     });
   } catch (error) {
@@ -112,13 +95,69 @@ router.put('/:id', authorize(['admin', 'researcher']), async (req, res, next) =>
 router.delete('/:id', authorize(['admin']), async (req, res, next) => {
   try {
     const { id } = req.params;
+    const userId = req.user.uid;
 
-    // TODO: Delete from database
-    logger.info(`Chemical ${id} deleted by ${req.user.email}`);
+    await ChemicalsService.delete(id, userId);
 
     res.json({
       success: true,
       message: 'Chemical deleted successfully'
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * Widget endpoints - Recent chemicals
+ * GET /api/chemicals/widget/recent
+ */
+router.get('/widget/recent', async (req, res, next) => {
+  try {
+    const userId = req.user.uid;
+    const limit = parseInt(req.query.limit) || 10;
+
+    const chemicals = await ChemicalsService.getRecent(userId, limit);
+
+    res.json({
+      success: true,
+      data: chemicals
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * Widget endpoints - Favorites
+ * GET /api/chemicals/widget/favorites
+ */
+router.get('/widget/favorites', async (req, res, next) => {
+  try {
+    const userId = req.user.uid;
+    const chemicals = await ChemicalsService.getFavorites(userId);
+
+    res.json({
+      success: true,
+      data: chemicals
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * Widget endpoints - Inventory alerts
+ * GET /api/chemicals/widget/alerts
+ */
+router.get('/widget/alerts', async (req, res, next) => {
+  try {
+    const userId = req.user.uid;
+    const alerts = await ChemicalsService.getInventoryAlerts(userId);
+
+    res.json({
+      success: true,
+      data: alerts
     });
   } catch (error) {
     next(error);

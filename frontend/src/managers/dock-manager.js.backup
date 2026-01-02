@@ -1,0 +1,401 @@
+/**
+ * DockManager
+ * Manages dock apps with drag-and-drop functionality
+ * Similar to macOS dock behavior
+ */
+
+export class DockManager {
+  constructor(options = {}) {
+    this.storageManager = options.storageManager;
+    this.dockApps = this.loadDockApps();
+
+    // Callbacks
+    this.onAppClick = options.onAppClick || (() => {});
+
+    this.init();
+  }
+
+  init() {
+    this.wiggleModeActive = false;
+    this.renderDock();
+    this.setupDropZone();
+    this.setupWiggleMode();
+  }
+
+  /**
+   * Load dock apps from storage or use defaults
+   * Only Search and Settings are permanent default apps
+   */
+  loadDockApps() {
+    const stored = localStorage.getItem('symbiosis-dock-apps');
+    if (stored) {
+      return JSON.parse(stored);
+    }
+
+    // Default dock apps - only Search and Settings
+    return [
+      { id: 'search', name: 'Search', icon: '🔍', type: 'system', permanent: true },
+      { type: 'divider' },
+      { id: 'settings', name: 'Settings', icon: '⚙️', type: 'system', permanent: true }
+    ];
+  }
+
+  /**
+   * Save dock apps to storage
+   */
+  saveDockApps() {
+    localStorage.setItem('symbiosis-dock-apps', JSON.stringify(this.dockApps));
+    console.log('Dock apps saved to localStorage');
+  }
+
+  /**
+   * Render the dock
+   */
+  renderDock() {
+    const dock = document.querySelector('.desktop-dock');
+    if (!dock) return;
+
+    dock.innerHTML = '';
+
+    this.dockApps.forEach((app, index) => {
+      if (app.type === 'divider') {
+        const divider = document.createElement('div');
+        divider.className = 'dock-divider';
+        dock.appendChild(divider);
+        return;
+      }
+
+      const appElement = document.createElement('div');
+      appElement.className = 'dock-app';
+      appElement.dataset.appId = app.id;
+      appElement.dataset.appType = app.type;
+
+      appElement.innerHTML = `
+        <div class="dock-app-icon">${app.icon}</div>
+        <div class="dock-app-label">${app.name}</div>
+      `;
+
+      // Click handler
+      appElement.addEventListener('click', (e) => {
+        // Don't trigger click if in wiggle mode
+        if (this.wiggleModeActive) {
+          e.preventDefault();
+          return;
+        }
+        this.onAppClick(app);
+      });
+
+      dock.appendChild(appElement);
+    });
+  }
+
+  /**
+   * Setup long-press removal for dock app
+   * Hold for 1 second to enter wiggle mode, then drag and release to remove.
+   */
+  setupLongPressRemoval(appElement, app, index) {
+    let longPressTimer = null;
+    let inRemovalMode = false;
+    let isDragging = false;
+    let startPos = { x: 0, y: 0 };
+    let elementStartRect = null;
+
+    const handleMouseDown = (e) => {
+      // Only respond to left-clicks
+      if (e.button !== 0) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      startPos = { x: e.clientX, y: e.clientY };
+      elementStartRect = appElement.getBoundingClientRect();
+
+      document.addEventListener('mousemove', handleMouseMove, { passive: false });
+      document.addEventListener('mouseup', handleMouseUp, { once: true });
+
+      longPressTimer = setTimeout(() => {
+        inRemovalMode = true;
+        isDragging = true; // Automatically start dragging after long-press
+        appElement.classList.add('removal-mode', 'is-dragging');
+        console.log('Removal mode activated for', app.name);
+      }, 1000); // 1-second hold
+    };
+
+    const handleMouseMove = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const dist = Math.hypot(e.clientX - startPos.x, e.clientY - startPos.y);
+
+      // If we haven't entered removal mode and the mouse moves too much, cancel the timer.
+      // This prevents accidental drags from triggering the long press.
+      if (!inRemovalMode && dist > 10) {
+        clearTimeout(longPressTimer);
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+        return;
+      }
+
+      if (!isDragging) return;
+
+      const deltaX = e.clientX - startPos.x;
+      const deltaY = e.clientY - startPos.y;
+
+      // Remove wiggle animation while dragging to prevent transform conflicts
+      appElement.classList.remove('removal-mode');
+      appElement.style.transition = 'none';
+      appElement.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
+
+      // Check if dragged far enough away from the dock
+      const dockRect = document.querySelector('.desktop-dock').getBoundingClientRect();
+      if (elementStartRect.top + deltaY < dockRect.top - 40) { // 40px above the dock
+        appElement.classList.add('removal-ready');
+      } else {
+        appElement.classList.remove('removal-ready');
+      }
+    };
+
+    const handleMouseUp = (e) => {
+      clearTimeout(longPressTimer);
+      document.removeEventListener('mousemove', handleMouseMove);
+
+      const wasInRemovalMode = inRemovalMode;
+      const wasDragging = isDragging;
+      const isReadyForRemoval = appElement.classList.contains('removal-ready');
+
+      // Always reset state flags immediately
+      inRemovalMode = false;
+      isDragging = false;
+
+      if (wasInRemovalMode && wasDragging && isReadyForRemoval) {
+        // Remove all other classes and start implode animation
+        appElement.classList.remove('is-dragging', 'removal-mode', 'removal-ready');
+        appElement.style.transition = '';
+        appElement.style.transform = ''; // Clear transform so animation works
+        appElement.classList.add('imploding');
+
+        appElement.addEventListener('animationend', () => {
+          this.removeAppFromDock(index);
+          console.log('Removed', app.name, 'from dock');
+        }, { once: true });
+      } else if (wasInRemovalMode) {
+        // If we were in removal mode but didn't remove, snap back smoothly
+        appElement.classList.remove('is-dragging', 'removal-mode', 'removal-ready');
+        appElement.style.transition = 'transform 0.3s cubic-bezier(0.25, 1, 0.5, 1)';
+        appElement.style.transform = '';
+
+        // Clean up transition style after animation
+        appElement.addEventListener('transitionend', () => {
+          appElement.style.transition = '';
+        }, { once: true });
+      } else {
+        // Regular click - clean up any classes
+        appElement.classList.remove('is-dragging', 'removal-mode', 'removal-ready');
+        appElement.style.transition = '';
+        appElement.style.transform = '';
+      }
+    };
+
+    // Clean up old listeners just in case of re-renders
+    appElement.removeEventListener('mousedown', handleMouseDown);
+    
+    // Add main listener
+    appElement.addEventListener('mousedown', handleMouseDown);
+  }
+
+  /**
+   * Setup drag-and-drop reordering for dock apps
+   */
+  setupDockReordering() {
+    const dock = document.querySelector('.desktop-dock');
+    if (!dock) return;
+
+    let draggedElement = null;
+    let draggedIndex = null;
+
+    // Make dock apps draggable with a short delay to not interfere with long-press
+    this.dockApps.forEach((app, index) => {
+      if (app.type === 'divider') return;
+
+      const appElement = dock.querySelector(`[data-app-id="${app.id}"]`);
+      if (!appElement) return;
+
+      appElement.setAttribute('draggable', 'false'); // Start as not draggable
+
+      let dragStartTimer = null;
+
+      appElement.addEventListener('mousedown', (e) => {
+        // Only enable dragging after 200ms (to avoid conflict with long-press)
+        dragStartTimer = setTimeout(() => {
+          appElement.setAttribute('draggable', 'true');
+        }, 200);
+      });
+
+      appElement.addEventListener('mouseup', () => {
+        clearTimeout(dragStartTimer);
+        appElement.setAttribute('draggable', 'false');
+      });
+
+      appElement.addEventListener('dragstart', (e) => {
+        e.stopPropagation();
+        draggedElement = appElement;
+        draggedIndex = index;
+        appElement.classList.add('dragging-reorder');
+        e.dataTransfer.effectAllowed = 'move';
+      });
+
+      appElement.addEventListener('dragend', () => {
+        appElement.classList.remove('dragging-reorder');
+        draggedElement = null;
+        draggedIndex = null;
+        appElement.setAttribute('draggable', 'false');
+
+        // Remove all drop indicators
+        dock.querySelectorAll('.drop-indicator').forEach(el => el.remove());
+      });
+
+      appElement.addEventListener('dragover', (e) => {
+        if (!draggedElement || draggedElement === appElement) return;
+
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+
+        // Show drop indicator
+        const rect = appElement.getBoundingClientRect();
+        const midpoint = rect.left + rect.width / 2;
+        const dropBefore = e.clientX < midpoint;
+
+        // Remove old indicators
+        dock.querySelectorAll('.drop-indicator').forEach(el => el.remove());
+
+        // Add new indicator
+        const indicator = document.createElement('div');
+        indicator.className = 'drop-indicator';
+        if (dropBefore) {
+          appElement.parentNode.insertBefore(indicator, appElement);
+        } else {
+          appElement.parentNode.insertBefore(indicator, appElement.nextSibling);
+        }
+      });
+
+      appElement.addEventListener('drop', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (!draggedElement || draggedElement === appElement) return;
+
+        const rect = appElement.getBoundingClientRect();
+        const midpoint = rect.left + rect.width / 2;
+        const dropBefore = e.clientX < midpoint;
+
+        // Calculate target index
+        let targetIndex = index;
+        if (!dropBefore && draggedIndex < index) {
+          // Dropping after, and dragging from before
+          targetIndex = index;
+        } else if (dropBefore && draggedIndex > index) {
+          // Dropping before, and dragging from after
+          targetIndex = index;
+        } else if (!dropBefore) {
+          targetIndex = index + 1;
+        }
+
+        // Reorder the array
+        const [removed] = this.dockApps.splice(draggedIndex, 1);
+        this.dockApps.splice(targetIndex, 0, removed);
+
+        // Save and re-render
+        this.saveDockApps();
+        this.renderDock();
+        this.setupDockReordering(); // Re-setup after render
+
+        console.log(`Reordered: moved ${app.name} to position ${targetIndex}`);
+      });
+    });
+  }
+
+  /**
+   * Setup dock as a drop zone for widgets
+   */
+  setupDropZone() {
+    const dock = document.querySelector('.desktop-dock');
+    if (!dock) return;
+
+    dock.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+      dock.classList.add('dock-drag-over');
+    });
+
+    dock.addEventListener('dragleave', (e) => {
+      if (e.target === dock) {
+        dock.classList.remove('dock-drag-over');
+      }
+    });
+
+    dock.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dock.classList.remove('dock-drag-over');
+
+      try {
+        const widgetData = JSON.parse(e.dataTransfer.getData('application/json'));
+
+        // Only allow 1×1 apps
+        if (widgetData.cols === 1 && widgetData.rows === 1 && widgetData.type === 'app') {
+          this.addAppToDock(widgetData);
+        } else {
+          alert('Only 1×1 apps can be added to the dock.');
+        }
+      } catch (error) {
+        console.error('Error parsing dropped widget:', error);
+      }
+    });
+  }
+
+  /**
+   * Add an app to the dock (before the divider)
+   */
+  addAppToDock(widgetData) {
+    // Check if app already exists in dock
+    if (this.dockApps.find(app => app.id === widgetData.id)) {
+      alert(`${widgetData.name} is already in the dock.`);
+      return;
+    }
+
+    // Find divider index
+    const dividerIndex = this.dockApps.findIndex(app => app.type === 'divider');
+
+    const dockApp = {
+      id: widgetData.id,
+      name: widgetData.name,
+      icon: widgetData.icon,
+      type: 'widget',
+      widgetDefId: widgetData.id
+    };
+
+    // Insert before divider (or at end if no divider)
+    if (dividerIndex !== -1) {
+      this.dockApps.splice(dividerIndex, 0, dockApp);
+    } else {
+      this.dockApps.push(dockApp);
+    }
+
+    this.saveDockApps();
+    this.renderDock();
+
+    console.log(`Added ${widgetData.name} to dock`);
+  }
+
+
+  /**
+   * Remove an app from the dock
+   */
+  removeAppFromDock(index) {
+    const app = this.dockApps[index];
+    this.dockApps.splice(index, 1);
+    this.saveDockApps();
+    this.renderDock();
+
+    console.log(`Removed ${app.name} from dock`);
+  }
+}

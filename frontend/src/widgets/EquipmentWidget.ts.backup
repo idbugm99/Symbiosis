@@ -1,0 +1,349 @@
+/**
+ * Equipment Widget
+ * Simple search widget with detailed popup
+ */
+
+import { searchEquipment } from '../data/equipment/queries';
+import type { equipment as EquipmentType } from '../data/equipment/equipment';
+
+type Equipment = typeof EquipmentType[0];
+
+export class EquipmentWidget {
+  private container: HTMLElement;
+  private searchInput: HTMLInputElement | null = null;
+  private resultsContainer: HTMLElement | null = null;
+  private currentResults: Equipment[] = [];
+
+  constructor(container: HTMLElement) {
+    this.container = container;
+    this.render();
+    this.setupEventListeners();
+  }
+
+  /**
+   * Render the widget content
+   */
+  private render(): void {
+    this.container.innerHTML = `
+      <div class="equipment-widget">
+        <!-- Widget Title -->
+        <div class="equipment-title">Equipment</div>
+
+        <!-- Search Box -->
+        <div class="equipment-search">
+          <div class="equipment-search-icon">🔍</div>
+          <input
+            type="text"
+            class="equipment-search-input"
+            placeholder="Search equipment..."
+            autocomplete="off"
+          />
+        </div>
+
+        <!-- Results List -->
+        <div class="equipment-results">
+          <!-- Results will be rendered here -->
+        </div>
+      </div>
+    `;
+
+    // Cache references
+    this.searchInput = this.container.querySelector('.equipment-search-input');
+    this.resultsContainer = this.container.querySelector('.equipment-results');
+
+    // Start with empty results
+    this.currentResults = [];
+    this.renderEmptyState();
+  }
+
+  /**
+   * Setup event listeners
+   */
+  private setupEventListeners(): void {
+    this.container.addEventListener('input', (e: Event) => {
+      const target = e.target as HTMLElement;
+      if (target.classList.contains('equipment-search-input')) {
+        const query = (target as HTMLInputElement).value.trim();
+        this.handleSearch(query);
+      }
+    }, true);
+  }
+
+  /**
+   * Handle search input
+   */
+  private handleSearch(query: string): void {
+    if (query.length === 0) {
+      this.currentResults = [];
+      this.renderEmptyState();
+    } else {
+      this.currentResults = searchEquipment(query);
+      this.renderResults();
+    }
+  }
+
+  /**
+   * Render empty state
+   */
+  private renderEmptyState(): void {
+    if (!this.resultsContainer) return;
+
+    this.resultsContainer.innerHTML = `
+      <div class="equipment-empty-state">
+        <div class="equipment-empty-text">Type to search equipment...</div>
+      </div>
+    `;
+  }
+
+  /**
+   * Render search results
+   */
+  private renderResults(): void {
+    if (!this.resultsContainer) return;
+
+    // Clear previous results
+    this.resultsContainer.innerHTML = '';
+
+    if (this.currentResults.length === 0) {
+      this.resultsContainer.innerHTML = `
+        <div class="equipment-no-results">No equipment found</div>
+      `;
+      return;
+    }
+
+    // Render each equipment item
+    this.currentResults.forEach((equipment) => {
+      const item = this.createEquipmentItem(equipment);
+      this.resultsContainer.appendChild(item);
+    });
+  }
+
+  /**
+   * Create equipment list item
+   */
+  private createEquipmentItem(equipment: Equipment): HTMLElement {
+    const item = document.createElement('div');
+    item.className = 'equipment-item';
+    item.dataset.equipmentId = equipment.equipment_id;
+
+    const name = equipment.equipment_name || 'Unknown';
+    const displayName = name.length > 20 ? name.substring(0, 20) + '...' : name;
+
+    const internalId = equipment.internal_id || 'N/A';
+
+    let assetId = equipment.asset_sticker_id || 'N/A';
+    if (assetId.length > 10) {
+      assetId = '...' + assetId.substring(assetId.length - 8);
+    }
+
+    item.innerHTML = `
+      <span class="equipment-name" title="${equipment.equipment_name || 'Unknown'}">${displayName}</span>
+      <span class="equipment-internal-id">${internalId}</span>
+      <span class="equipment-asset-id">${assetId}</span>
+    `;
+
+    // Click handler - show detail card
+    item.addEventListener('click', () => {
+      this.showDetailCard(equipment);
+    });
+
+    return item;
+  }
+
+  /**
+   * Show equipment detail card (popup)
+   */
+  private showDetailCard(equipment: Equipment): void {
+    // Clear search input and results
+    if (this.searchInput) {
+      this.searchInput.value = '';
+    }
+    this.currentResults = [];
+    this.renderEmptyState();
+
+    // Mock status data
+    const statusInfo = this.getMockStatusInfo(equipment);
+
+    // Create detail card popup
+    const card = document.createElement('div');
+    card.className = 'equipment-detail-card';
+    card.innerHTML = `
+      <button class="equipment-close-btn">×</button>
+
+      <div class="equipment-detail-header">
+        <div class="equipment-detail-actions">
+          <button class="equipment-detail-btn btn-expand">Expand</button>
+          <button class="equipment-detail-btn btn-copy">Copy identifiers</button>
+        </div>
+
+        <h3 class="equipment-detail-title">${equipment.equipment_name || 'Unknown Equipment'}</h3>
+
+        <div class="equipment-detail-status-row">
+          <span class="equipment-status-badge ${statusInfo.statusClass}">✓ In Commission</span>
+          <span class="equipment-status-divider">•</span>
+          <span class="equipment-status-date">As of 17Apr2019</span>
+        </div>
+
+        <div class="equipment-detail-divider"></div>
+      </div>
+
+      <div class="equipment-detail-content">
+        <div class="equipment-detail-fields">
+          <div class="equipment-detail-field-group">
+            <label class="equipment-field-label">Model Number</label>
+            <div class="equipment-field-value-box">${equipment.model_number || 'N/A'}</div>
+          </div>
+          <div class="equipment-detail-field-group">
+            <label class="equipment-field-label">Serial Number</label>
+            <div class="equipment-field-value-box">${equipment.serial_number || 'N/A'}</div>
+          </div>
+        </div>
+
+        <div class="equipment-detail-info-list">
+          <div class="equipment-info-row">
+            <span class="equipment-info-icon">📍</span>
+            <div class="equipment-info-content">
+              <span class="equipment-info-label">Lab Location</span>
+            </div>
+            <div class="equipment-info-status">
+              <span class="equipment-info-text">${equipment.location || 'Unknown'} • Updated ${statusInfo.locationUpdate}</span>
+            </div>
+            <button class="equipment-info-chevron">›</button>
+          </div>
+
+          <div class="equipment-info-row">
+            <span class="equipment-info-icon">🔧</span>
+            <div class="equipment-info-content">
+              <span class="equipment-info-label">Maintenance History</span>
+            </div>
+            <div class="equipment-info-status">
+              <span class="equipment-info-badge ${statusInfo.maintenanceClass}">${statusInfo.maintenanceText}</span>
+            </div>
+            <button class="equipment-info-chevron">›</button>
+          </div>
+
+          <div class="equipment-info-row">
+            <span class="equipment-info-icon">📊</span>
+            <div class="equipment-info-content">
+              <span class="equipment-info-label">Calibration History</span>
+            </div>
+            <div class="equipment-info-status">
+              <span class="equipment-info-badge ${statusInfo.calibrationClass}">${statusInfo.calibrationText}</span>
+            </div>
+            <button class="equipment-info-chevron">›</button>
+          </div>
+
+          <div class="equipment-info-row">
+            <span class="equipment-info-icon">📋</span>
+            <div class="equipment-info-content">
+              <span class="equipment-info-label">Associated SOPs</span>
+            </div>
+            <div class="equipment-info-status">
+              <span class="equipment-info-text">${statusInfo.sopsText}</span>
+            </div>
+            <button class="equipment-info-chevron">›</button>
+          </div>
+        </div>
+
+        <div class="equipment-detail-footer">
+          Last Verified ${statusInfo.lastVerified} • System Derived
+        </div>
+      </div>
+    `;
+
+    // Add to body
+    document.body.appendChild(card);
+
+    // Setup button handlers
+    const expandBtn = card.querySelector('.btn-expand');
+    const copyBtn = card.querySelector('.btn-copy');
+    const closeBtn = card.querySelector('.equipment-close-btn');
+
+    expandBtn?.addEventListener('click', () => {
+      this.openEquipmentApp(equipment);
+      card.remove();
+    });
+
+    copyBtn?.addEventListener('click', () => {
+      this.copyEquipmentInfo(equipment);
+    });
+
+    closeBtn?.addEventListener('click', () => {
+      card.remove();
+    });
+
+    // Click outside to close
+    setTimeout(() => {
+      const handleOutsideClick = (e: MouseEvent) => {
+        if (!card.contains(e.target as Node)) {
+          card.remove();
+          document.removeEventListener('click', handleOutsideClick);
+        }
+      };
+      document.addEventListener('click', handleOutsideClick);
+    }, 100);
+  }
+
+  /**
+   * Get mock status information
+   */
+  private getMockStatusInfo(equipment: Equipment): any {
+    const hash = equipment.equipment_id.split('-')[1] || '00001';
+    const num = parseInt(hash, 10);
+
+    return {
+      statusText: '✓ In Commission',
+      statusClass: 'status-commissioned',
+      locationUpdate: '3h/12/2029',
+      maintenanceText: num % 3 === 0 ? '✓ Ready! - Up to date' : 'Due Soon - Schedule maintenance',
+      maintenanceClass: num % 3 === 0 ? 'status-success' : 'status-warning',
+      calibrationText: num % 2 === 0 ? '⚠ Warning - Expires in 1 day' : 'Valid until ' + new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString(),
+      calibrationClass: num % 2 === 0 ? 'status-warning' : 'status-success',
+      sopsText: `Referenced in ${num % 7 + 1} SOPs`,
+      lastVerified: '13Feb2024'
+    };
+  }
+
+  /**
+   * Copy equipment info to clipboard
+   */
+  private copyEquipmentInfo(equipment: Equipment): void {
+    const info = `
+Equipment: ${equipment.equipment_name}
+Model: ${equipment.model_number || 'N/A'}
+Serial: ${equipment.serial_number || 'N/A'}
+Internal ID: ${equipment.internal_id || 'N/A'}
+Location: ${equipment.location || 'N/A'}
+    `.trim();
+
+    navigator.clipboard.writeText(info).then(() => {
+      console.log('Copied to clipboard!');
+    });
+  }
+
+  /**
+   * Open full Equipment app
+   */
+  private openEquipmentApp(equipment: Equipment): void {
+    const event = new CustomEvent('open-equipment-app', {
+      detail: { equipmentId: equipment.equipment_id }
+    });
+    window.dispatchEvent(event);
+    console.log('Opening Equipment app for:', equipment.equipment_name);
+  }
+
+  /**
+   * Refresh widget data
+   */
+  public refresh(): void {
+    const query = this.searchInput?.value.trim() || '';
+    this.handleSearch(query);
+  }
+
+  /**
+   * Cleanup
+   */
+  public destroy(): void {
+    this.container.innerHTML = '';
+  }
+}

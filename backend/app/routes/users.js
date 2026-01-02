@@ -2,6 +2,7 @@ import express from 'express';
 import { logger } from '../utils/logger.js';
 import { authorize } from '../middleware/auth.js';
 import { setUserClaims, getUserByUid } from '../services/firebase.js';
+import userPreferencesService from '../services/UserPreferencesService.js';
 
 const router = express.Router();
 
@@ -74,6 +75,64 @@ router.get('/', authorize(['admin']), async (req, res, next) => {
       success: true,
       data: [],
       message: 'User listing not yet implemented'
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * Get user menu bar configuration
+ * GET /api/user/:userId/menubar
+ */
+router.get('/:userId/menubar', async (req, res, next) => {
+  try {
+    const { userId } = req.params;
+
+    // Verify user is requesting their own config or is admin
+    if (req.user.uid !== userId && !req.user.role?.includes('admin')) {
+      return res.status(403).json({
+        success: false,
+        error: 'Unauthorized to access this user\'s configuration'
+      });
+    }
+
+    const config = await userPreferencesService.getMenuBarConfig(userId);
+
+    res.json({
+      success: true,
+      data: config
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * Save user menu bar configuration
+ * POST /api/user/:userId/menubar
+ */
+router.post('/:userId/menubar', async (req, res, next) => {
+  try {
+    const { userId } = req.params;
+    const config = req.body;
+
+    // Verify user is updating their own config or is admin
+    if (req.user.uid !== userId && !req.user.role?.includes('admin')) {
+      return res.status(403).json({
+        success: false,
+        error: 'Unauthorized to update this user\'s configuration'
+      });
+    }
+
+    const savedConfig = await userPreferencesService.saveMenuBarConfig(userId, config);
+
+    logger.info(`Menu bar configuration saved for user ${userId}`);
+
+    res.json({
+      success: true,
+      data: savedConfig,
+      message: 'Menu bar configuration saved successfully'
     });
   } catch (error) {
     next(error);

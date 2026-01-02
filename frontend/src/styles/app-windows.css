@@ -1,0 +1,314 @@
+/**
+ * App Window Styles
+ * Styles for app windows managed by AppUIController
+ */
+
+/* Base app window */
+.app-window {
+  position: fixed;
+  background: var(--bg-primary, #ffffff);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+  overflow: hidden;
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+
+.app-window.active {
+  box-shadow: 0 10px 50px rgba(0, 0, 0, 0.3);
+}
+
+.app-window.closing {
+  opacity: 0;
+  transform: scale(0.95);
+}
+
+.app-window.minimized {
+  display: none;
+}
+
+/* Display Modes */
+
+/* Fullscreen - Covers entire viewport */
+.app-window.fullscreen {
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  border-radius: 0;
+}
+
+/* Fullscreen No Nav - Leaves room for top nav */
+.app-window.fullscreen-no-nav {
+  top: 60px; /* Adjust based on nav height */
+  left: 0;
+  width: 100vw;
+  height: calc(100vh - 60px);
+  border-radius: 0;
+}
+
+/* Fullscreen No Dock - Leaves room for dock */
+.app-window.fullscreen-no-dock {
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: calc(100vh - 80px); /* Adjust based on dock height */
+  border-radius: 0;
+}
+
+/* Popup - Floating window with chrome */
+.app-window.popup {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  min-width: 400px;
+  min-height: 300px;
+  max-width: 90vw;
+  max-height: 90vh;
+  overflow: hidden; /* Changed from auto to prevent scroll bars during resize */
+}
+
+/* Modal - Centered with backdrop */
+.app-window.modal {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  min-width: 400px;
+  min-height: 300px;
+  max-width: 90vw;
+  max-height: 90vh;
+  z-index: 2000; /* Higher than popups */
+}
+
+.app-window.modal::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: -1;
+}
+
+/* Embedded - No chrome, inline */
+.app-window.embedded {
+  position: relative;
+  box-shadow: none;
+  border-radius: 0;
+}
+
+/* Window Chrome */
+
+.app-window-chrome {
+  position: relative;
+  background: var(--chrome-bg, #f5f5f5);
+  border-bottom: 1px solid var(--chrome-border, #e0e0e0);
+}
+
+.app-window-titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 40px;
+  padding: 0 12px;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  pointer-events: auto; /* Ensure it receives mouse events */
+}
+
+.app-window-titlebar:active {
+  cursor: grabbing;
+}
+
+.app-window-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary, #333);
+}
+
+.app-window-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.app-window-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--text-secondary, #666);
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+.app-window-btn:hover {
+  background: var(--btn-hover-bg, #e0e0e0);
+  color: var(--text-primary, #333);
+}
+
+.app-window-btn.close-btn:hover {
+  background: #ff5f56;
+  color: white;
+}
+
+/* Floating Close Button (for fullscreen modes) */
+
+.app-floating-close-btn {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 40px;
+  height: 40px;
+  border: none;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(10px);
+  color: white;
+  font-size: 24px;
+  font-weight: 300;
+  line-height: 40px; /* Match height for perfect centering */
+  border-radius: 50%;
+  cursor: pointer;
+  z-index: 1000;
+  transition: all 0.2s ease;
+  text-align: center;
+  opacity: 0.7;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+.app-floating-close-btn:hover {
+  opacity: 1;
+  background: rgba(255, 59, 48, 0.9);
+  transform: scale(1.1);
+}
+
+.app-floating-close-btn:active {
+  transform: scale(0.95);
+}
+
+/* Resize Handle */
+
+.app-window-resize-handle {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 20px;
+  height: 20px;
+  cursor: nwse-resize;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  color: var(--text-secondary, #999);
+  user-select: none;
+  opacity: 0.5;
+  transition: opacity 0.2s ease;
+}
+
+.app-window-resize-handle:hover {
+  opacity: 1;
+}
+
+/* App Content Container */
+
+.app-content {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  background: var(--bg-primary, #ffffff);
+}
+
+.app-window.popup .app-content,
+.app-window.modal .app-content {
+  height: calc(100% - 40px); /* Subtract title bar height */
+}
+
+/* Animations */
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideInLeft {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes expandFromCenter {
+  from {
+    transform: scale(0);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+/* Responsive */
+
+@media (max-width: 768px) {
+  .app-window.popup,
+  .app-window.modal {
+    width: 95vw !important;
+    height: 90vh !important;
+    min-width: unset;
+    min-height: unset;
+  }
+}
+
+/* Dark Mode Support */
+
+@media (prefers-color-scheme: dark) {
+  .app-window {
+    background: var(--bg-primary-dark, #1e1e1e);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+  }
+
+  .app-window-chrome {
+    background: var(--chrome-bg-dark, #2d2d2d);
+    border-bottom-color: var(--chrome-border-dark, #404040);
+  }
+
+  .app-window-title {
+    color: var(--text-primary-dark, #e0e0e0);
+  }
+
+  .app-window-btn {
+    color: var(--text-secondary-dark, #a0a0a0);
+  }
+
+  .app-window-btn:hover {
+    background: var(--btn-hover-bg-dark, #404040);
+    color: var(--text-primary-dark, #e0e0e0);
+  }
+
+  .app-content {
+    background: var(--bg-primary-dark, #1e1e1e);
+  }
+}

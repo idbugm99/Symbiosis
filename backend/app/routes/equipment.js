@@ -1,6 +1,6 @@
 import express from 'express';
-import { logger } from '../utils/logger.js';
 import { authorize } from '../middleware/auth.js';
+import EquipmentService from '../services/EquipmentService.js';
 
 const router = express.Router();
 
@@ -10,19 +10,11 @@ const router = express.Router();
  */
 router.get('/', async (req, res, next) => {
   try {
-    const { status, category, limit = 50, offset = 0 } = req.query;
-
-    // TODO: Implement database query
-    const equipment = [];
+    const result = await EquipmentService.getAll(req.query);
 
     res.json({
       success: true,
-      data: equipment,
-      pagination: {
-        limit: parseInt(limit),
-        offset: parseInt(offset),
-        total: 0
-      }
+      ...result
     });
   } catch (error) {
     next(error);
@@ -36,11 +28,9 @@ router.get('/', async (req, res, next) => {
 router.get('/:id', async (req, res, next) => {
   try {
     const { id } = req.params;
+    const equipment = await EquipmentService.getById(id);
 
-    // TODO: Implement database query
-    const equipmentItem = null;
-
-    if (!equipmentItem) {
+    if (!equipment) {
       return res.status(404).json({
         success: false,
         error: 'Equipment not found'
@@ -49,7 +39,7 @@ router.get('/:id', async (req, res, next) => {
 
     res.json({
       success: true,
-      data: equipmentItem
+      data: equipment
     });
   } catch (error) {
     next(error);
@@ -63,16 +53,9 @@ router.get('/:id', async (req, res, next) => {
 router.post('/', authorize(['admin', 'supervisor']), async (req, res, next) => {
   try {
     const equipmentData = req.body;
+    const userId = req.user.uid;
 
-    // TODO: Validate and insert into database
-    const newEquipment = {
-      id: Date.now(),
-      ...equipmentData,
-      createdBy: req.user.uid,
-      createdAt: new Date().toISOString()
-    };
-
-    logger.info(`Equipment created by ${req.user.email}:`, newEquipment.id);
+    const newEquipment = await EquipmentService.create(equipmentData, userId);
 
     res.status(201).json({
       success: true,
@@ -91,13 +74,72 @@ router.put('/:id', authorize(['admin', 'supervisor']), async (req, res, next) =>
   try {
     const { id } = req.params;
     const updateData = req.body;
+    const userId = req.user.uid;
 
-    // TODO: Update in database
-    logger.info(`Equipment ${id} updated by ${req.user.email}`);
+    const updatedEquipment = await EquipmentService.update(id, updateData, userId);
 
     res.json({
       success: true,
+      data: updatedEquipment,
       message: 'Equipment updated successfully'
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * Delete equipment
+ * DELETE /api/equipment/:id
+ */
+router.delete('/:id', authorize(['admin']), async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.uid;
+
+    await EquipmentService.delete(id, userId);
+
+    res.json({
+      success: true,
+      message: 'Equipment deleted successfully'
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * Widget endpoints - Calibration schedule
+ * GET /api/equipment/widget/calibration
+ */
+router.get('/widget/calibration', async (req, res, next) => {
+  try {
+    const userId = req.user.uid;
+    const daysAhead = parseInt(req.query.daysAhead) || 30;
+
+    const schedule = await EquipmentService.getCalibrationSchedule(userId, daysAhead);
+
+    res.json({
+      success: true,
+      data: schedule
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * Widget endpoints - Status monitor
+ * GET /api/equipment/widget/status
+ */
+router.get('/widget/status', async (req, res, next) => {
+  try {
+    const userId = req.user.uid;
+    const statusData = await EquipmentService.getStatusMonitor(userId);
+
+    res.json({
+      success: true,
+      data: statusData
     });
   } catch (error) {
     next(error);
